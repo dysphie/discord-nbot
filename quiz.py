@@ -1,6 +1,7 @@
 import asyncio
 
 import discord
+import time
 
 from message_generator import data_collection
 
@@ -15,11 +16,14 @@ class Quiz(object):
             return
         self.ongoing = True
         user = data_collection.get_random_user()
-        fake_msg = data_collection.fabricate_sentence(user)
         username = user['username']
-        await ctx.send('**Who Dis Quiz:** \n %s' % fake_msg)
+        start_time = time.time()
         await ctx.message.add_reaction('⏳')
-
+        fake_msg = data_collection.fabricate_sentence(user)
+        time_taken = time.time() - start_time
+        wait_time = 3 - time_taken
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
         await ctx.send('**Who Dis Quiz:** \n %s' % fake_msg)
         await ctx.message.clear_reactions()
         await asyncio.sleep(20)
