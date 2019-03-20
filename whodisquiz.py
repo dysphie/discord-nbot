@@ -12,6 +12,7 @@ import asyncio
 import os
 from discord.ext import commands
 import argparse
+import numpy as np
 import logging
 import random
 from typing import List
@@ -24,10 +25,7 @@ auth_token = os.getenv('DISCORD_BOT_TOKEN')
 
 MESSAGE_BLACKLIST = ['html', 'bot c', 'botc']
 WORD_BLACKLIST = ['http://', 'https://', '[ ]']
-USER_BLACKLIST = ['kanqaroo', 'Olex', 'rocket.cat', 'bot', 'AmhpLiFy', 'Z',
-                  'WCEendT', 'Foofoo14', 'Glass', 'testaccount', 'jack.lupino', 'SylphCA',
-                  'jorainbo', 'x00irt', 'slamarechi', 'tadiconedr', 'Z', 'Bowser',
-                  'el_frotal', 'Conifacio', 'Uwaai', 'Reign', '-_-BIER--_--', 'Nicarasu']
+USER_BLACKLIST = []
 
 quiz_active = False
 quiz_submissions = {}
@@ -48,7 +46,7 @@ async def whodis(ctx):
 
     winners = []
     for player, guess in quiz_submissions.items():
-        if guess == model_user:
+        if guess.lower() == model_user.lower():
             winners.append(player)
 
     winner_count = len(winners)
@@ -82,7 +80,7 @@ def get_words(messages_collection: database.Collection, query_filter: dict) -> L
         if not msg or should_skip_message(msg):
             continue
         words = msg.split()
-        if not words or len(words) > 20:
+        if not words:
             continue
         unique_words.extend([word for word in words if should_include_word(word)])
     return unique_words
@@ -143,7 +141,7 @@ def pick_random_user():
             continue
         candidates.append(user)
    
-    return random.choice(candidates)
+    return np.random.choice(candidates)
 
 
 def fabricate_msg():
@@ -173,5 +171,5 @@ def fabricate_msg():
     return username, ' '.join(words)
 
 
-bot.run("NDAwMDkyNDA5ODM0NTA0MjEy.D3OEYw.gXHIZNCr3sgfoxEHVdnZqlUpMVg")
+bot.run(auth_token)
 
