@@ -1,6 +1,7 @@
 import os
 
-from discord import Guild
+from aiohttp import ClientSession
+from discord import Guild, Webhook, AsyncWebhookAdapter
 from discord.ext import commands
 from discord.ext.commands import Context
 
@@ -10,6 +11,9 @@ from markov_generator import fabricate_sentence, create_model
 bot = commands.Bot(command_prefix='.')
 
 BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
+if not WEBHOOK_URL:
+    raise Exception('You must set the DISCORD_WEBHOOK_URL environment variable')
 
 
 @bot.event
@@ -28,11 +32,9 @@ async def be(ctx: Context, nickname: str) -> object:
         return
 
     content = fabricate_sentence(user.id)
-
-    # todo webhook id from env vars
-    webhook = await ctx.channel.create_webhook(name='Temporary')
-    await webhook.send(content=content, username=nickname, avatar_url=user.avatar_url)
-    await webhook.delete()
+    async with ClientSession as session:
+        webhook = Webhook.from_url(WEBHOOK_URL, adapter=AsyncWebhookAdapter(session))
+        await webhook.send(content, username=nickname, avatar_url=user.avatar_url)
 
 
 @bot.command()
