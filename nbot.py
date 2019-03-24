@@ -1,12 +1,12 @@
-import logging
 import os
 
-import discord
+from discord import Guild
 from discord.ext import commands
+from discord.ext.commands import Context
 
+from logger import log
 from markov_generator import fabricate_sentence, create_model
 
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(asctime)s - %(message)s')
 bot = commands.Bot(command_prefix='.')
 
 BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
@@ -14,16 +14,17 @@ BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 
 @bot.event
 async def on_ready():
-    logging.info('Ready')
+    log.info('Nbot ready')
 
 
 @bot.command()
-async def be(ctx: discord.Webhook, *args) -> object:
-    guild = ctx.channel.guild
-    nickname = ' '.join(args)
-
+async def be(ctx: Context, nickname: str) -> object:
+    if not nickname:
+        return
+    guild: Guild = ctx.channel.guild
     user = guild.get_member_named(nickname)
     if not user:
+        await ctx.send('User %s not found.' % nickname)
         return
 
     content = fabricate_sentence(user.id)
@@ -35,11 +36,15 @@ async def be(ctx: discord.Webhook, *args) -> object:
 
 
 @bot.command()
-async def add(ctx, user_id: int):
-    model = create_model(user_id)
-
-    for i in range(5):
-        logging.debug('TEST SENTENCE: ' + model.make_sentence(tries=100))
+async def add(ctx: Context, nickname: str):
+    lvh = 102140663629361152
+    q = 232909513378758657
+    allowed_ids = [lvh, q]
+    if ctx.author.id in allowed_ids:
+        user = ctx.channel.guild.get_member_named(nickname)
+        await ctx.send('Updating model for %s' % nickname)
+        create_model(user.id)
+        await ctx.send('Updated model for %s' % nickname)
 
 
 bot.run(BOT_TOKEN)
