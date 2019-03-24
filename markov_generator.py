@@ -15,10 +15,6 @@ MESSAGE_URL_REGEX = re.compile(r'https?://(\S+)')
 
 
 class DiscordText(markovify.NewlineText):
-
-    def __init__(self, *args, **kwargs):
-        super(DiscordText, self).__init__(*args, **kwargs, retain_original=False)
-
     # github.com/jsvine/markovify/issues/84
     def test_sentence_input(self, sentence):
         return True
@@ -62,7 +58,6 @@ def _filter_message(message: str) -> str:
 
 
 def fabricate_sentence(user_id: int) -> str:
-    # Get cached model or bail
     model = models.find_one({'_id': user_id})
     if model:
         uncompressed_model = zlib.decompress(model['model'])
