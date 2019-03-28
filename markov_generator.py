@@ -3,8 +3,10 @@ import time
 import zlib
 from datetime import datetime
 from io import StringIO
+from typing import List
 
 import markovify
+import pymongo
 from pymongo.cursor import Cursor
 
 from db import chat, models
@@ -24,6 +26,16 @@ def _get_model_str(qry: Cursor) -> str:
     f = StringIO()
     for msg in qry:
         message = _filter_message(msg['message'])
+        if not _should_skip_message(message):
+            f.write(message)
+            f.write('\n')
+    return f.getvalue()
+
+
+def _get_model_str_from_array(messages: List[str]) -> str:
+    f = StringIO()
+    for msg in messages:
+        message = _filter_message(msg)
         if not _should_skip_message(message):
             f.write(message)
             f.write('\n')
@@ -65,3 +77,13 @@ def fabricate_sentence(user_id: int) -> str:
     else:
         model = create_model(user_id)
     return model.make_sentence(tries=100)
+
+
+def fabricate_message_from_history(messages: List[str]) -> str:
+    model = DiscordText(_get_model_str_from_array(messages))
+    history_count = 10000
+    qry = chat.find(None, {'message': 1, '_id': 0}).sort([('epoch', pymongo.DESCENDING)]).limit(history_count)
+    last_100k_messages_model = DiscordText(_get_model_str(qry))
+    weight = history_count / (len(messages) / 10)
+    combined_model = markovify.combine(models=[model, last_100k_messages_model], weights=[weight, 1])
+    return combined_model.make_sentence(tries=100)
