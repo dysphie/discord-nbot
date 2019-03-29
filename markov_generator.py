@@ -25,7 +25,7 @@ class DiscordText(markovify.NewlineText):
 def _get_model_str(qry: Cursor) -> str:
     f = StringIO()
     for msg in qry:
-        message = _filter_message(msg['message'])
+        message = _filter_message(msg['m'])
         if not _should_skip_message(message):
             f.write(message)
             f.write('\n')
@@ -45,7 +45,7 @@ def _get_model_str_from_array(messages: List[str]) -> str:
 def create_model(user_id: int) -> DiscordText:
     start_time = time.time()
     log.info('Constructing speech model for %d...' % user_id)
-    qry = chat.find({'user_id': user_id}, {'message': 1, '_id': 0})
+    qry = chat.find({'a': user_id}, {'m': 1, '_id': 0})
     model = DiscordText(_get_model_str(qry))
     log.info('Created model in %.3fs.', time.time() - start_time)
     _save_model(user_id, model)
@@ -72,9 +72,19 @@ def _filter_message(message: str) -> str:
 def fabricate_sentence(user_id: int) -> str:
     model = models.find_one({'_id': user_id})
     if model:
-        uncompressed_model = zlib.decompress(model['model'])
-        model = DiscordText.from_json(uncompressed_model)
-    else:
+        qry = chat.find({'a': user_id}).sort('d', pymongo.DESCENDING).limit(1)
+        try:
+            newest_date = qry[0]['d']
+        except IndexError:
+            newest_date = datetime(2015, 1, 1)
+        if newest_date > model['date']:
+            # There are new messages, invalidate the model
+            log.info('Re-creating model for %s', user_id)
+            model = None
+        else:
+            uncompressed_model = zlib.decompress(model['model'])
+            model = DiscordText.from_json(uncompressed_model)
+    if not model:
         model = create_model(user_id)
     return model.make_sentence(tries=100)
 
@@ -82,8 +92,8 @@ def fabricate_sentence(user_id: int) -> str:
 def fabricate_message_from_history(messages: List[str]) -> str:
     model = DiscordText(_get_model_str_from_array(messages))
     history_count = 10000
-    qry = chat.find(None, {'message': 1, '_id': 0}).sort([('epoch', pymongo.DESCENDING)]).limit(history_count)
-    last_100k_messages_model = DiscordText(_get_model_str(qry))
+    qry = chat.find(None, {'m': 1, '_id': 0}).sort([('d', pymongo.DESCENDING)]).limit(history_count)
+    last_10k_messages_model = DiscordText(_get_model_str(qry))
     weight = history_count / (len(messages) / 10)
-    combined_model = markovify.combine(models=[model, last_100k_messages_model], weights=[weight, 1])
+    combined_model = markovify.combine(models=[model, last_10k_messages_model], weights=[weight, 1])
     return combined_model.make_sentence(tries=100)

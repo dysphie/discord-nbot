@@ -1,10 +1,11 @@
 import os
 from typing import Optional
 
-from discord import Webhook, User, RequestsWebhookAdapter
+from discord import Webhook, User, RequestsWebhookAdapter, Permissions
 from discord.ext import commands
-from discord.ext.commands import Context
+from discord.ext.commands import Context, CommandNotFound
 
+from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
 
@@ -20,8 +21,16 @@ async def on_ready():
     log.info('Nbot ready')
 
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, CommandNotFound):
+        return
+    await ctx.send('An error occurred while executing the command: %s' % error)
+    raise error
+
+
 @bot.command()
-async def be(ctx: Context, nickname: str) -> object:
+async def be(ctx: Context, nickname: str = None) -> object:
     if not nickname:
         return
     user = find_user(ctx, nickname)
@@ -36,10 +45,7 @@ async def be(ctx: Context, nickname: str) -> object:
 
 @bot.command()
 async def add(ctx: Context, nickname: str):
-    lvh = 102140663629361152
-    q = 232909513378758657
-    allowed_ids = [lvh, q]
-    if ctx.author.id in allowed_ids:
+    if is_admin(ctx):
         user = find_user(ctx, nickname)
         if user:
             name = _get_valid_user_name(user)
@@ -54,6 +60,18 @@ async def add(ctx: Context, nickname: str):
 async def random(ctx: Context):
     message = fabricate_message_from_history([msg.content async for msg in ctx.channel.history(limit=300)])
     await ctx.send(message)
+
+
+@bot.command()
+async def i(ctx: Context):
+    if is_admin(ctx):
+        await start_import(ctx)
+
+
+def is_admin(ctx: Context):
+    author: User = ctx.author
+    permissions: Permissions = author.permissions_in(ctx.channel)
+    return permissions.administrator
 
 
 def find_user(ctx: Context, name: str) -> Optional[User]:

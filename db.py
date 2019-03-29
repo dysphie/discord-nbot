@@ -9,5 +9,5 @@ if not DATABASE_URI:
     raise Exception('You must set the DATABASE_URI environment variable')
 
 db = MongoClient(DATABASE_URI).get_database(DB_NAME)
-chat = db.get_collection('discord_chat')
+chat = db.get_collection('chat_archive')
 models = db.get_collection('model_cache')
