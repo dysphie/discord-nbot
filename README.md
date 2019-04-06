@@ -7,3 +7,8 @@ Constructs random "sentences" from messages from the old server
 `.be <username>`: Sends randomly constructed message using `username` his message history
 
 `.add <username>`: (Re)builds the model used to construct messages for `username`
+
+Required bot permissions:
+- Send message
+- Read message History
+- Manage webhooks
