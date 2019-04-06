@@ -8,7 +8,7 @@ from discord.ext.commands import Context, CommandNotFound
 from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
-from webhooks import get_webhook_for_channel
+from webhooks import send_webhook_to_channel
 
 bot = commands.Bot(command_prefix='.')
 
@@ -38,9 +38,7 @@ async def be(ctx: Context, nickname: str = None) -> object:
         return
 
     content = fabricate_sentence(user.id)
-    webhook = await get_webhook_for_channel(ctx.channel)
-    await webhook.send(content=content, username=nickname, avatar_url=user.avatar_url)
-    webhook.send(content, username=_get_valid_user_name(user), avatar_url=user.avatar_url)
+    await send_webhook_to_channel(ctx.channel, content, nickname, user.avatar_url)
 
 
 @bot.command()

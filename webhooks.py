@@ -3,7 +3,7 @@ from discord import TextChannel, Webhook, RequestsWebhookAdapter
 from db import webhooks
 
 
-async def get_webhook_for_channel(channel: TextChannel) -> Webhook:
+async def send_webhook_to_channel(channel: TextChannel, content: str, nickname: str, avatar_url: str):
     model = webhooks.find_one({'_id': channel.id})
     if not model:
         webhook: Webhook = await channel.create_webhook(name='NBot %s' % channel.name)
@@ -13,4 +13,6 @@ async def get_webhook_for_channel(channel: TextChannel) -> Webhook:
             'token': webhook.token
         }
         webhooks.insert(model)
-    return Webhook.partial(model['id'], model['token'], adapter=RequestsWebhookAdapter())
+    else:
+        webhook = Webhook.partial(model['id'], model['token'], adapter=RequestsWebhookAdapter())
+    await webhook.send(content=content, username=nickname, avatar_url=avatar_url)
