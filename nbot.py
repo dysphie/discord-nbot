@@ -1,19 +1,18 @@
 import os
 from typing import Optional
 
-from discord import Webhook, User, RequestsWebhookAdapter, Permissions
+from discord import User, Permissions
 from discord.ext import commands
 from discord.ext.commands import Context, CommandNotFound
 
 from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
+from webhooks import get_webhook_for_channel
 
 bot = commands.Bot(command_prefix='.')
 
 BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-WEBHOOK_ID = int(os.environ.get('WEBHOOK_ID'))
-WEBHOOK_TOKEN = os.environ.get('WEBHOOK_TOKEN')
 
 
 @bot.event
@@ -39,7 +38,8 @@ async def be(ctx: Context, nickname: str = None) -> object:
         return
 
     content = fabricate_sentence(user.id)
-    webhook = Webhook.partial(WEBHOOK_ID, WEBHOOK_TOKEN, adapter=RequestsWebhookAdapter())
+    webhook = get_webhook_for_channel(ctx.channel)
+    await webhook.send(content=content, username=nickname, avatar_url=user.avatar_url)
     webhook.send(content, username=_get_valid_user_name(user), avatar_url=user.avatar_url)
 
 
@@ -66,6 +66,8 @@ async def random(ctx: Context):
 async def i(ctx: Context):
     if is_admin(ctx):
         await start_import(ctx)
+    else:
+        log.info('Not starting import: user %s is not administrator', ctx.author)
 
 
 def is_admin(ctx: Context):

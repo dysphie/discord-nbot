@@ -11,3 +11,4 @@ if not DATABASE_URI:
 db = MongoClient(DATABASE_URI).get_database(DB_NAME)
 chat = db.get_collection('chat_archive')
 models = db.get_collection('model_cache')
+webhooks = db.get_collection('webhooks')
