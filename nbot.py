@@ -38,7 +38,7 @@ async def be(ctx: Context, nickname: str = None) -> object:
         return
 
     content = fabricate_sentence(user.id)
-    webhook = get_webhook_for_channel(ctx.channel)
+    webhook = await get_webhook_for_channel(ctx.channel)
     await webhook.send(content=content, username=nickname, avatar_url=user.avatar_url)
     webhook.send(content, username=_get_valid_user_name(user), avatar_url=user.avatar_url)
 
