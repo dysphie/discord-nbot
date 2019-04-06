@@ -15,4 +15,4 @@ async def send_webhook_to_channel(channel: TextChannel, content: str, nickname: 
         webhooks.insert(model)
     else:
         webhook = Webhook.partial(model['id'], model['token'], adapter=RequestsWebhookAdapter())
-    return webhook.send(content=content, username=nickname, avatar_url=avatar_url)
+    return await webhook.send(content=content, username=nickname, avatar_url=avatar_url)
