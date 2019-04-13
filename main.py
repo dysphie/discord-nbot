@@ -113,7 +113,7 @@ async def be(ctx: Context, nickname: str = None) -> object:
         return
 
     content = fabricate_sentence(user.id)
-    await send_webhook_to_channel(ctx.channel, content, nickname, user.avatar_url)
+    await send_webhook_to_channel(ctx.channel, content, user.display_name, user.avatar_url)
 
 
 # Generate sentence based on current chat
