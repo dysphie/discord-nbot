@@ -34,7 +34,16 @@ async def on_command_error(ctx, error):
 # Chat triggers
 @bot.event
 async def on_message(message):
-    if message.author.bot: return
+    if message.author.bot:
+        # Repost PatchBot's messages without ads
+        if message.author is "PatchBot#0000":   
+            for embed in message.embeds:
+                if not "This update is sponsored by" in embed.author.name:
+                    await testing.send(embed=embed)
+            message.delete()
+
+        # Ignore bots further
+        return
 
     # Process any commands
     await bot.process_commands(message)
