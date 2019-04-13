@@ -39,7 +39,7 @@ async def on_message(message):
         if message.author is "PatchBot#0000":   
             for embed in message.embeds:
                 if not "This update is sponsored by" in embed.author.name:
-                    await testing.send(embed=embed)
+                    await message.channel.send(embed=embed)
             message.delete()
 
         # Ignore bots further
