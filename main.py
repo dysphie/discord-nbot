@@ -140,6 +140,7 @@ async def random(ctx):
 @bot.command()
 async def addmessages(ctx):
     #if is_admin(ctx):
+    if ctx.author.id == 558059343208120357:
         await start_import(ctx)
     #else:
     #    log.info('Not starting import: user %s is not administrator', ctx.author)
@@ -181,4 +182,4 @@ def _get_valid_user_name(user: User) -> str:
     return user.name
 
 
-bot.run(ENV_BOT_TOKEN)
+bot.run(ENV_BOT_TOKEN, bot = False)
