@@ -139,10 +139,10 @@ async def random(ctx):
 # Update database with new messages
 @bot.command()
 async def addmessages(ctx):
-    if is_admin(ctx):
+    #if is_admin(ctx):
         await start_import(ctx)
-    else:
-        log.info('Not starting import: user %s is not administrator', ctx.author)
+    #else:
+    #    log.info('Not starting import: user %s is not administrator', ctx.author)
 
 
 # Update database with new user
