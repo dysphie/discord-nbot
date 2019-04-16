@@ -40,7 +40,6 @@ async def on_message(message):
             for embed in message.embeds:
                 if not "This update is sponsored by" in embed.author.name:
                     await message.channel.send(embed=embed)
-            await message.channel.send("<@402528814548254720> thread hijacking will not be tolerated.")
             await message.delete()
 
         # Ignore bots further
