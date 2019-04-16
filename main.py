@@ -36,7 +36,7 @@ async def on_command_error(ctx, error):
 async def on_message(message):
     if message.author.bot:
         # Repost PatchBot's messages without ads
-        if message.author is "PatchBot#0000":   
+        if message.author.name == 'PatchBot' and message.author.discriminator == '0000':   
             for embed in message.embeds:
                 if not "This update is sponsored by" in embed.author.name:
                     await message.channel.send(embed=embed)
@@ -173,6 +173,8 @@ def find_user(ctx: Context, name: str) -> Optional[User]:
     for member in ctx.channel.guild.members:
         if member.nick and name in member.nick.lower() or name in member.name.lower():
             return member
+
+    
 
 
 def _get_valid_user_name(user: User) -> str:
