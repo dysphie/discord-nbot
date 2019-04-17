@@ -164,7 +164,7 @@ def is_admin(ctx: Context):
     return permissions.administrator
 
 
-def find_user(ctx, lead):
+async def find_user(ctx, lead):
 
     # Find by name inside guild
     user = ctx.channel.guild.get_member_named(lead)
