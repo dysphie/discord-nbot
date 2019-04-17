@@ -20,7 +20,7 @@ cleverbot = Cleverbot()
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} [ID: {bot.user.id}]')
+    print('Logged in as %s [ID: %s]' % (bot.user.name, bot.user.id))
 
 
 @bot.event
@@ -116,8 +116,9 @@ async def hex(ctx, hex_code: str):
 async def be(ctx: Context, nickname: str = None) -> object:
     if not nickname:
         return
-    user = find_user(ctx, nickname)
-    if not user:
+    user = await find_user(ctx, nickname)
+    print(type(user))
+    if user is None:
         await ctx.send('User %s not found.' % nickname)
         return
 
@@ -129,11 +130,13 @@ async def be(ctx: Context, nickname: str = None) -> object:
 
 
 # Generate sentence based on current chat
+
+'''
 @bot.command()
 async def random(ctx):
     message = fabricate_message_from_history([msg.content async for msg in ctx.channel.history(limit=300)])
     await ctx.send(message)
-
+'''
 
 # Update database with new messages
 @bot.command()
@@ -159,8 +162,7 @@ async def adduser(ctx, nickname: str):
             await ctx.send('No user found with name "%s"' % nickname)
 
 def is_admin(ctx: Context):
-    author: User = ctx.author
-    permissions: Permissions = author.permissions_in(ctx.channel)
+    permissions = ctx.author.permissions_in(ctx.channel)
     return permissions.administrator
 
 
@@ -187,6 +189,5 @@ def _get_valid_user_name(user: User) -> str:
     if user.nick and len(user.nick) > 1:
         return user.nick
     return user.name
-
 
 bot.run(ENV_BOT_TOKEN)

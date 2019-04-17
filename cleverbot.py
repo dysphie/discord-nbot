@@ -19,4 +19,4 @@ class Cleverbot(object):
 
     def send(self, message):
         message = json.dumps({'msg': message})
-        return self.driver.execute_script(f"const msg = {message};cleverbot.sendAI(msg.msg)")
+        return self.driver.execute_script("const msg = %s;cleverbot.sendAI(msg.msg)" % message)

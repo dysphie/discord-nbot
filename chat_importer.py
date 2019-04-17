@@ -9,8 +9,8 @@ from db import chat
 from logger import log
 
 
-async def start_import(ctx: Context):
-    channel: TextChannel = ctx.channel
+async def start_import(ctx):
+    channel = ctx.channel
     log.info('Starting import for channel %s', channel.name)
     oldest_msg = chat.find({'c': ctx.channel.id}).sort([('d', -1)]).limit(1)
     try:
