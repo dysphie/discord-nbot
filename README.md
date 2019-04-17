@@ -1,14 +1,17 @@
-# fml-simulator
+# nbot
 
-Constructs random "sentences" from messages from the old server
+General purpose bot for NCrew
 
-## Usage
+Usage:
 
-`.be <username>`: Sends randomly constructed message using `username` his message history
+- `.hex <code>` to obtain a custom role with said color
+- `botc <message>` to talk to the bot (Cleverbot)
+- `.be <username/nickname>` to make the bot impersonate said user
+- `.random` to generate unique speech based on recent chat history
+- Type IN ALL CAPS and have the bot yell back at you
+- React to color palettes posted by the bot to change your user color
 
-`.add <username>`: (Re)builds the model used to construct messages for `username`
 
-Required bot permissions:
-- Send message
-- Read message History
-- Manage webhooks
+Admin only:
+- `.addmessages` to load all of a channel's messages into the database
+- `.adduser <username/nickname>` to create or update the speech model for that user 
