@@ -106,7 +106,6 @@ async def hex(ctx, hex_code: str):
     role = await guild.create_role(name='Custom: ' + hex_code, color=new_color)
     user = ctx.message.author
 
-    print('removecolors')
     await remove_colors(user) # Remove any existing color roles
     await user.add_roles(role)
 
@@ -180,7 +179,7 @@ async def find_user(ctx, lead):
 
     # Interpret as ID, lookup in our db
     user_id = int(lead)
-    if db.messages.find_one({"a": user_id}):
+    if db.chat.find_one({"a": user_id}):
         user = await bot.fetch_user(user_id)
         if user: return user
 
