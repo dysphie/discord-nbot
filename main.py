@@ -164,16 +164,23 @@ def is_admin(ctx: Context):
     return permissions.administrator
 
 
-def find_user(ctx: Context, name: str) -> Optional[User]:
-    member = ctx.channel.guild.get_member_named(name)
-    if member:
-        return member
-    name = name.lower()
-    for member in ctx.channel.guild.members:
-        if member.nick and name in member.nick.lower() or name in member.name.lower():
-            return member
+def find_user(ctx, lead):
 
-    
+    # Find by name inside guild
+    user = ctx.channel.guild.get_member_named(lead)
+    if user: return user
+
+    # Find by loose name inside guild
+    lead = lead.lower()
+    for user in ctx.channel.guild.members:
+        if user.nick and lead in user.nick.lower() or lead in user.name.lower():
+            return user
+
+    # Interpret as ID, lookup in our db
+    user_id = int(lead)
+    if db.messages.find_one({"a": user_id}):
+        user = await bot.fetch_user(user_id)
+        if user: return user
 
 
 def _get_valid_user_name(user: User) -> str:
