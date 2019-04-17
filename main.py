@@ -121,11 +121,11 @@ async def be(ctx: Context, nickname: str = None) -> object:
         await ctx.send('User %s not found.' % nickname)
         return
 
-    content = fabricate_sentence(user.id)
-
-    display_name = user.display_name
-    while len(display_name) < 2: display_name+='~'
-    await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
+    for i in range(3):
+        content = fabricate_sentence(user.id)
+        display_name = user.display_name
+        while len(display_name) < 2: display_name+='~'
+        await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
 
 
 # Generate sentence based on current chat
