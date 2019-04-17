@@ -9,7 +9,7 @@ from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
 from webhooks import send_webhook_to_channel
-from db import yells, db
+from db import yells, chat
 from colorpicker import reactionships, remove_colors, isrgbcolor
 
 ENV_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
@@ -179,7 +179,7 @@ async def find_user(ctx, lead):
 
     # Interpret as ID, lookup in our db
     user_id = int(lead)
-    if db.chat.find_one({"a": user_id}):
+    if chat.find_one({"a": user_id}):
         user = await bot.fetch_user(user_id)
         if user: return user
 
