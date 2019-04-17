@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional
 import discord
 from discord import User, Permissions
@@ -116,7 +117,6 @@ async def be(ctx: Context, nickname: str = None) -> object:
     if not nickname:
         return
     user = await find_user(ctx, nickname)
-    print(type(user))
     if user is None:
         await ctx.send('User %s not found.' % nickname)
         return
@@ -126,6 +126,7 @@ async def be(ctx: Context, nickname: str = None) -> object:
         display_name = user.display_name
         while len(display_name) < 2: display_name+='~'
         await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
+        time.sleep(1)
 
 
 # Generate sentence based on current chat
