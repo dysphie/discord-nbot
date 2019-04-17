@@ -9,7 +9,7 @@ from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
 from webhooks import send_webhook_to_channel
-from db import yells
+from db import yells, db
 from colorpicker import reactionships, remove_colors, isrgbcolor
 
 ENV_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
