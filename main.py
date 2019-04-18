@@ -1,5 +1,13 @@
+'''
+TODO:
+- Merge db.cache and db.model_cache
+- Fix regex filter not working
+'''
+
+
 import os
 import time
+import re
 from typing import Optional
 import discord
 from discord import User, Permissions
@@ -10,14 +18,17 @@ from chat_importer import start_import
 from logger import log
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
 from webhooks import send_webhook_to_channel
-from db import yells, chat
+from db import yells, chat, cache
 from colorpicker import reactionships, remove_colors, isrgbcolor
 
 ENV_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
+if not ENV_BOT_TOKEN:
+    raise Exception('You must set the DISCORD_BOT_TOKEN environment variable')
 
 bot = commands.Bot(command_prefix='.')
 cleverbot = Cleverbot()
 
+#user_mention = re.compile(re.escape(r'<@!([0-9]+)>'))
 
 @bot.event
 async def on_ready():
@@ -113,16 +124,23 @@ async def hex(ctx, hex_code: str):
     
 # Impersonate user
 @bot.command()
-async def be(ctx: Context, nickname: str = None) -> object:
-    if not nickname:
-        return
-    user = await find_user(ctx, nickname)
+async def be(ctx, identity):
+
+    user = await find_user(ctx, identity)
     if user is None:
-        await ctx.send('User %s not found.' % nickname)
+        await ctx.send(f'User {identity} not found.')
         return
 
     for i in range(3):
         content = fabricate_sentence(user.id)
+
+        '''
+        match = user_mention.match(content)
+        if match:
+            nametag = get_nametag_from_id(match.group(1))
+            content = content.replace(user_mention,nametag)
+        '''
+
         display_name = user.display_name
         while len(display_name) < 2: display_name+='~'
         await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
@@ -130,13 +148,11 @@ async def be(ctx: Context, nickname: str = None) -> object:
 
 
 # Generate sentence based on current chat
-
-'''
 @bot.command()
 async def random(ctx):
     message = fabricate_message_from_history([msg.content async for msg in ctx.channel.history(limit=300)])
     await ctx.send(message)
-'''
+
 
 # Update database with new messages
 @bot.command()
@@ -144,7 +160,7 @@ async def addmessages(ctx):
     if is_admin(ctx):
         await start_import(ctx)
     else:
-        log.info('Not starting import: user %s is not administrator', ctx.author)
+        log.info(f'{ctx.author} tried to import messages but is not administrator')
 
 
 # Update database with new user
@@ -154,40 +170,52 @@ async def adduser(ctx, nickname: str):
     if is_admin(ctx):
         user = find_user(ctx, nickname)
         if user:
-            name = _get_valid_user_name(user)
-            await ctx.send('Updating model for %s' % name)
             create_model(user.id)
-            await ctx.send('Updated model for %s' % name)
-        else:
-            await ctx.send('No user found with name "%s"' % nickname)
+            return True
+    return False
+
 
 def is_admin(ctx: Context):
     permissions = ctx.author.permissions_in(ctx.channel)
     return permissions.administrator
 
 
-async def find_user(ctx, lead):
+async def find_user(ctx, identity):
 
-    # Find by name inside guild
-    user = ctx.channel.guild.get_member_named(lead)
+    # Search as user in current server
+    user = ctx.channel.guild.get_member_named(identity)
     if user: return user
 
-    # Find by loose name inside guild
-    lead = lead.lower()
-    for user in ctx.channel.guild.members:
-        if user.nick and lead in user.nick.lower() or lead in user.name.lower():
-            return user
+    # Search as name in users cache
 
-    # Interpret as ID, lookup in our db
-    user_id = int(lead)
-    if chat.find_one({"a": user_id}):
-        user = await bot.fetch_user(user_id)
-        if user: return user
+    substring = re.compile(fr'{identity}', re.I)
+    result = cache.find_one({ "n": substring })
+    if result:
+        user_id = result.get("_id")
+        if user_id:
+            user = await bot.fetch_user(user_id)
+            if user: return user
+            
+    # Search as ID in chat log
+    try: 
+        identity = int(identity)
+        result = chat.find_one({"a": identity})
+        if result:
+            user = await bot.fetch_user(identity)
+            if user: 
+                hotname = f'{user.name}#{user.discriminator}'
+                cache.update_one({'_id': identity}, {'$set': {'n': hotname}}, upsert=True)
+                embed = discord.Embed(description=f'**{identity}** may now be referred to as **{hotname}**', color=0x1abc9c)
+                await ctx.channel.send(embed=embed)
+                return user
+    except ValueError:
+        pass
 
-
-def _get_valid_user_name(user: User) -> str:
-    if user.nick and len(user.nick) > 1:
-        return user.nick
-    return user.name
+async def get_nametag_from_id(user_id):
+    user = await bot.fetch_user(user_id)
+    return f'{user.name}#{user.discriminator}' if user else 'Deleted#0000'
 
 bot.run(ENV_BOT_TOKEN)
+
+
+
