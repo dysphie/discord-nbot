@@ -195,8 +195,8 @@ async def find_user(ctx, identity):
     
     # Search as user in current server
     for user in ctx.channel.guild.members:
-    if user.nick and name in user.nick.lower() or name in user.name.lower():
-        return user
+        if user.nick and name in user.nick.lower() or name in user.name.lower():
+            return user
 
     # Search as name in users cache
     substring = re.compile(fr'{identity}', re.I)
