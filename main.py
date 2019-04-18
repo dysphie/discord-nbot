@@ -138,12 +138,7 @@ async def be(ctx, identity):
     for i in range(3):
         content = fabricate_sentence(user.id)
 
-        '''
-        match = user_mention.match(content)
-        if match:
-            nametag = get_nametag_from_id(match.group(1))
-            content = content.replace(user_mention,nametag)
-        '''
+
 
         await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
         time.sleep(1)
@@ -197,9 +192,10 @@ def is_admin(ctx: Context):
 
 
 async def find_user(ctx, identity):
+    
     # Search as user in current server
-    user = ctx.channel.guild.get_member_named(identity)
-    if user:
+    for user in ctx.channel.guild.members:
+    if user.nick and name in user.nick.lower() or name in user.name.lower():
         return user
 
     # Search as name in users cache
