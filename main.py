@@ -192,10 +192,10 @@ def is_admin(ctx: Context):
 
 
 async def find_user(ctx, identity):
-    
+
     # Search as user in current server
     for user in ctx.channel.guild.members:
-        if user.nick and name in user.nick.lower() or name in user.name.lower():
+        if user.nick and identity in user.nick.lower() or identity in user.name.lower():
             return user
 
     # Search as name in users cache
