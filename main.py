@@ -27,7 +27,7 @@ if not ENV_BOT_TOKEN:
 bot = commands.Bot(command_prefix='.')
 cleverbot = None
 
-user_mention = re.compile(r'<@!([0-9]+)>')
+user_mention = re.compile(r'<@![0-9]+>')
 
 
 @bot.event
@@ -242,11 +242,4 @@ async def get_nametag_from_id(user_id):
     return f'{user.name}#{user.discriminator}' if user else 'Deleted#0000'
 
 
-
-
-
-
 bot.run(ENV_BOT_TOKEN)
-
-
-
