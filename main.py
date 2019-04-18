@@ -27,7 +27,7 @@ if not ENV_BOT_TOKEN:
 bot = commands.Bot(command_prefix='.')
 cleverbot = None
 
-user_mention = re.compile(r'<@![0-9]+>')
+user_mention = re.compile(r'<@[0-9]+>')
 
 
 @bot.event
