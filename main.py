@@ -27,8 +27,8 @@ if not ENV_BOT_TOKEN:
 bot = commands.Bot(command_prefix='.')
 cleverbot = None
 
+user_mention = re.compile(r'<@!([0-9]+)>')
 
-# user_mention = re.compile(re.escape(r'<@!([0-9]+)>'))
 
 @bot.event
 async def on_ready():
@@ -138,7 +138,8 @@ async def be(ctx, identity):
     for i in range(3):
         content = fabricate_sentence(user.id)
 
-
+        # Completely remove mentions for now
+        content = re.sub(user_mention, '', content)
 
         await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
         time.sleep(1)
@@ -241,4 +242,11 @@ async def get_nametag_from_id(user_id):
     return f'{user.name}#{user.discriminator}' if user else 'Deleted#0000'
 
 
+
+
+
+
 bot.run(ENV_BOT_TOKEN)
+
+
+
