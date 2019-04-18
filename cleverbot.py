@@ -2,6 +2,7 @@ from selenium import webdriver
 import json
 import time
 
+
 class Cleverbot(object):
     _last_message = ''
 
