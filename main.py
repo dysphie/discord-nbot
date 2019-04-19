@@ -61,8 +61,8 @@ async def on_message(message):
     await bot.process_commands(message)
 
     # Talk to cleverbot
-    if message.content.lower().startswith('bot '):
-        cleverbot.send(message.content[4:])
+    if message.content.lower().startswith('botc '):
+        cleverbot.send(message.content[5:])
         response = cleverbot.get_message()
         await message.channel.send(response)
         return
