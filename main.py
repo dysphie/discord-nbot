@@ -15,9 +15,11 @@ from discord.ext.commands import Context, CommandNotFound
 from chat_importer import start_import
 from cleverbot import Cleverbot
 from colorpicker import reactionships, remove_colors, isrgbcolor
-from db import yells, chat, cache
+from db import chat, cache
 from logger import log
+from louds import handle_loud_message, import_loud_messages
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
+from util import strip_mentions
 from webhooks import send_webhook_to_channel
 
 ENV_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
@@ -26,8 +28,6 @@ if not ENV_BOT_TOKEN:
 
 bot = commands.Bot(command_prefix='.')
 cleverbot = Cleverbot()
-
-user_mention = re.compile(r'<@!?[0-9]+>|@everyone|@here')
 
 
 @bot.event
@@ -61,19 +61,14 @@ async def on_message(message):
     await bot.process_commands(message)
 
     # Talk to cleverbot
-    if message.content.lower().startswith('botc '):
-        cleverbot.send(message.content[5:])
+    if message.content.lower().startswith('bot '):
+        cleverbot.send(message.content[4:])
         response = cleverbot.get_message()
         await message.channel.send(response)
         return
 
     # YELL
-    if message.content.isupper() and len(message.content.split()) > 2:
-        yells.insert_one({'msg': message.content})
-        cursor = yells.aggregate([{'$sample': {'size': 1}}])
-        for dic in cursor:
-            await message.channel.send(dic.get('msg'))
-            break
+    await handle_loud_message(message)
 
 
 # Give color role from palette
@@ -134,12 +129,10 @@ async def be(ctx, identity):
         display_name += '~'
     for i in range(3):
         content = fabricate_sentence(user.id)
-
-        # Completely remove mentions for now
-        content = re.sub(user_mention, '', content)
-
-        await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
-        time.sleep(1)
+        content = strip_mentions(content)
+        if content:
+            await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
+            time.sleep(1)
 
 
 # Generate sentence based on current chat
@@ -156,6 +149,17 @@ async def addmessages(ctx):
         await start_import(ctx)
     else:
         log.info(f'{ctx.author} tried to import messages but is not administrator')
+
+
+# Update / initialize the 'loud messages' database
+@bot.command()
+async def importlouds(ctx):
+    if is_admin(ctx):
+        log.info('Starting import of loud messages')
+        amount = import_loud_messages()
+        await ctx.send('Imported %d loud messages' % amount)
+    else:
+        log.info(f'{ctx.author} tried to import loud messages but is not administrator')
 
 
 # Update database with new user
