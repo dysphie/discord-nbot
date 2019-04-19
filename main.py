@@ -19,6 +19,7 @@ from db import chat, cache
 from logger import log
 from louds import handle_loud_message, import_loud_messages
 from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
+from util import strip_mentions
 from webhooks import send_webhook_to_channel
 
 ENV_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
@@ -27,8 +28,6 @@ if not ENV_BOT_TOKEN:
 
 bot = commands.Bot(command_prefix='.')
 cleverbot = Cleverbot()
-
-user_mention = re.compile(r'<@!?[0-9]+>|@everyone|@here')
 
 
 @bot.event
@@ -130,12 +129,10 @@ async def be(ctx, identity):
         display_name += '~'
     for i in range(3):
         content = fabricate_sentence(user.id)
-
-        # Completely remove mentions for now
-        content = re.sub(user_mention, '', content)
-
-        await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
-        time.sleep(1)
+        content = strip_mentions(content)
+        if content:
+            await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
+            time.sleep(1)
 
 
 # Generate sentence based on current chat
