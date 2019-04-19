@@ -25,7 +25,7 @@ if not ENV_BOT_TOKEN:
     raise Exception('You must set the DISCORD_BOT_TOKEN environment variable')
 
 bot = commands.Bot(command_prefix='.')
-cleverbot = None
+cleverbot = Cleverbot()
 
 user_mention = re.compile(r'<@!?[0-9]+>|@everyone|@here')
 
@@ -61,10 +61,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
     # Talk to cleverbot
-    if message.content.startswith('botc '):
-        global cleverbot
-        if not cleverbot:
-            cleverbot = Cleverbot()
+    if message.content.lower().startswith('botc '):
         cleverbot.send(message.content[5:])
         response = cleverbot.get_message()
         await message.channel.send(response)
