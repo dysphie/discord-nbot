@@ -3,13 +3,14 @@ TODO:
 - Merge db.cache and db.model_cache
 - Fix regex filter not working
 '''
-
+import asyncio
 import os
 import re
 import time
 
 import discord
 import markovify
+import math
 from discord.ext import commands
 from discord.ext.commands import Context, CommandNotFound
 
@@ -204,9 +205,29 @@ async def adduser(ctx, nickname: str):
     return False
 
 
+@bot.group()
+async def alias(ctx: Context):
+    if ctx.invoked_subcommand is None:
+        await ctx.send('Invalid command')
+
+
+@alias.command('list')
+async def list_aliases(ctx, page=1):
+    if is_admin(ctx):
+        page_size = 20
+        to_skip = page * page_size
+        qry = cache.find()
+        count = cache.estimated_document_count()
+        total_pages = math.floor(count / page_size)
+        results = qry.limit(page_size).skip(to_skip)
+        msg = '\n'.join(['<@%d>: %s' % (r['_id'], r['n']) for r in results])
+        msg += '\n_page %d/%d_' % (page, total_pages)
+        await ctx.send(msg)
+
+
 # Alias a user id to a readable name
-@bot.command()
-async def alias(ctx, user_id: str = None, nickname: str = None):
+@alias.command('add')
+async def add_alias(ctx, user_id: str = None, nickname: str = None):
     if is_admin(ctx):
         if not user_id:
             ctx.send('Missing argument user id')
@@ -214,9 +235,7 @@ async def alias(ctx, user_id: str = None, nickname: str = None):
             user_id = int(user_id)
             await _add_alias_to_user(ctx, user_id, nickname)
         except ValueError:
-            if user_id == 'list':
-                results = cache.find()
-                await ctx.send('\n'.join(['%s: %s' % (r['_id'], r['n']) for r in results]))
+            pass
 
 
 def is_admin(ctx: Context):
@@ -283,7 +302,7 @@ async def _send_model_messages(ctx: Context, model: DiscordText, user: discord.U
                 await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
             else:
                 await ctx.send(content)
-            time.sleep(1)
+            await asyncio.sleep(1)
 
 
 bot.run(ENV_BOT_TOKEN)
