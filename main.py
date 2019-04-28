@@ -7,19 +7,19 @@ TODO:
 import os
 import re
 import time
-import markovify
 
 import discord
+import markovify
 from discord.ext import commands
 from discord.ext.commands import Context, CommandNotFound
 
 from chat_importer import start_import
-from cleverbot import Cleverbot
 from colorpicker import reactionships, remove_colors, isrgbcolor
 from db import chat, cache
 from logger import log
 from louds import handle_loud_message, import_loud_messages
-from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history, get_model_for_user
+from markov_generator import create_model, fabricate_message_from_history, get_model_for_user, \
+    DiscordText, get_model_for_users
 from util import strip_mentions
 from webhooks import send_webhook_to_channel
 
@@ -117,6 +117,11 @@ async def hex(ctx, hex_code: str):
     await user.add_roles(role)
 
 
+@bot.command()
+async def ping(ctx):
+    await ctx.send(':ping_pong:')
+
+
 # Impersonate user
 @bot.command()
 async def be(ctx, identity):
@@ -125,52 +130,40 @@ async def be(ctx, identity):
         await ctx.send(f'User {identity} not found.')
         return
 
-    display_name = user.display_name
-    while len(display_name) < 2:
-        display_name += '~'
-    for i in range(3):
-        content = fabricate_sentence(user.id)
-        content = strip_mentions(content)
-        if content:
-            await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
-            time.sleep(1)
+    model = get_model_for_user(user.id)
+    await _send_model_messages(ctx, model, user)
+
 
 @bot.command()
-async def combine(ctx, query: str):
+async def combine(ctx: Context, query: str):
+    # ".be endigy+endig+endi+q+q+q+ q ++++++kosmo"
+    # translates to a list of user ids, bails when user is not found
 
-	# ".be endigy+endig+endi+q+q+q+ q ++++++kosmo"
-	# translates to 
-	# users = [discord.User (endigy), discord.User (q), discord.User (kosmo)]
-	# and bails on user not found
+    identities = {x.strip() for x in query.split('+') if x.strip()}
+    user_ids = set()
 
-	identities = set(list(filter(None, [x.strip() for x in query.split('+')])))
+    for identity in identities:
+        user = await find_user(ctx, identity)
+        if user:
+            user_ids.add(user.id)
+        else:
+            await ctx.channel.send(f'User `{identity}` not found.')
+            return
 
-	users = set([])
+    user_count = len(user_ids)
+    if user_count > 10:
+        await ctx.channel.send(f'**{user_count}** users? Processing power doesn\'t grow on trees mate')
+        return
 
-	for identity in identities:
-		user = await find_user(ctx, identity) # Replace for wider search later
-		if user:
-			users.add(user)
-		else:	
-			await ctx.channel.send(f'User `{identity}` not found.')
-			return
-
-	if len(users) > 10:
-		await ctx.channel.send(f'**{len(users)}** users? Processing power doesn\'t grow on trees mate')
-		return
-
-	if len(users) < 2:
-		await ctx.channel.send('Please specify at least 2 users')
-		return		
-
-	models = [get_model_for_user(user.id) for user in list(users)]
-
-	combined_model = markovify.combine(models) 
-
-	for i in range(3):
-		sentence = combined_model.make_sentence(tries=100)
-		sentence= strip_mentions(sentence)
-		await ctx.channel.send(sentence)
+    if user_count < 2:
+        await ctx.channel.send('Please specify at least 2 users')
+        return
+    models = get_model_for_users(user_ids)
+    log.debug('Combining models for %d users', user_count)
+    t = time.time()
+    combined_model = markovify.combine(models)
+    log.info('Combining models took %s', time.time() - t)
+    await _send_model_messages(ctx, combined_model)
 
 
 # Generate sentence based on current chat
@@ -204,7 +197,7 @@ async def importlouds(ctx):
 @bot.command()
 async def adduser(ctx, nickname: str):
     if is_admin(ctx):
-        user = find_user(ctx, nickname)
+        user = await find_user(ctx, nickname)
         if user:
             create_model(user.id)
             return True
@@ -232,11 +225,10 @@ def is_admin(ctx: Context):
 
 
 async def find_user(ctx, identity):
-
     # Search as user in current server
     for user in ctx.channel.guild.members:
-	    if user.nick and identity in user.nick.lower() or identity in user.name.lower():
-	        return user
+        if user.nick and user.nick.lower().startswith(identity) or user.name.lower().startswith(identity):
+            return user
 
     # Search as name in users cache
     substring = re.compile(fr'{identity}', re.I)
@@ -279,6 +271,19 @@ async def _add_alias_to_user(ctx: Context, identity: int, hotname: str = None):
 async def get_nametag_from_id(user_id):
     user = await bot.fetch_user(user_id)
     return f'{user.name}#{user.discriminator}' if user else 'Deleted#0000'
+
+
+async def _send_model_messages(ctx: Context, model: DiscordText, user: discord.User = None):
+    for i in range(3):
+        content = model.make_sentence(tries=100)
+        if content:
+            content = strip_mentions(content)
+            if user:
+                display_name = user.display_name.rjust(2, '~')
+                await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
+            else:
+                await ctx.send(content)
+            time.sleep(1)
 
 
 bot.run(ENV_BOT_TOKEN)

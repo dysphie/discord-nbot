@@ -3,7 +3,7 @@ import time
 import zlib
 from datetime import datetime
 from io import StringIO
-from typing import List
+from typing import List, Iterable
 
 import markovify
 import pymongo
@@ -69,24 +69,36 @@ def _filter_message(message: str) -> str:
     return re.sub(MESSAGE_URL_REGEX, '', message)
 
 
-def fabricate_sentence(user_id: int) -> str:
+def _should_recreate_model(user_id: int, model: dict):
+    qry = chat.find({'a': user_id}).sort('d', pymongo.DESCENDING).limit(1)
+    try:
+        newest_date = qry[0]['d']
+    except IndexError:
+        newest_date = datetime(2015, 1, 1)
+    return newest_date > model['date']
+
+
+def get_model_for_user(user_id: int) -> DiscordText:
     model = models.find_one({'_id': user_id})
+    if model and _should_recreate_model(user_id, model):
+        log.info('Re-creating model for %s', user_id)
+        model = None
     if model:
-        qry = chat.find({'a': user_id}).sort('d', pymongo.DESCENDING).limit(1)
-        try:
-            newest_date = qry[0]['d']
-        except IndexError:
-            newest_date = datetime(2015, 1, 1)
-        if newest_date > model['date']:
-            # There are new messages, invalidate the model
-            log.info('Re-creating model for %s', user_id)
-            model = None
-        else:
-            uncompressed_model = zlib.decompress(model['model'])
-            model = DiscordText.from_json(uncompressed_model)
-    if not model:
+        uncompressed_model = zlib.decompress(model['model'])
+        model = DiscordText.from_json(uncompressed_model)
+    else:
         model = create_model(user_id)
-    return model.make_sentence(tries=100)
+    return model
+
+
+def get_model_for_users(user_ids: Iterable[int]) -> List[DiscordText]:
+    qry = models.find({'_id': {'$in': [i for i in user_ids]}})
+    db_models = {m['_id']: DiscordText.from_json(zlib.decompress(m['model'])) for m in qry}
+    missing = [i for i in user_ids if i not in db_models]
+    if missing:
+        db_models.update({user_id: create_model(user_id) for user_id in missing})
+    # Return models in the order that we received the user ids
+    return [db_models[user_id] for user_id in user_ids]
 
 
 def fabricate_message_from_history(messages: List[str]) -> str:
@@ -97,15 +109,3 @@ def fabricate_message_from_history(messages: List[str]) -> str:
     weight = history_count / (len(messages) / 10)
     combined_model = markovify.combine(models=[model, last_10k_messages_model], weights=[weight, 1])
     return combined_model.make_sentence(tries=100)
-
-
-def get_model_for_user(user_id):
-
-    query = models.find_one({'_id': user_id})
-
-    if query:
-        model_json = zlib.decompress(query['model'])    
-        return DiscordText.from_json(model_json)
-    else:
-        return create_model(user_id)
-        
