@@ -97,3 +97,15 @@ def fabricate_message_from_history(messages: List[str]) -> str:
     weight = history_count / (len(messages) / 10)
     combined_model = markovify.combine(models=[model, last_10k_messages_model], weights=[weight, 1])
     return combined_model.make_sentence(tries=100)
+
+
+def get_model_for_user(user_id):
+
+    query = models.find_one({'_id': user_id})
+
+    if query:
+        model_json = zlib.decompress(query['model'])    
+        return DiscordText.from_json(model_json)
+    else:
+        return create_model(user_id)
+        

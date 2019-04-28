@@ -7,6 +7,7 @@ TODO:
 import os
 import re
 import time
+import markovify
 
 import discord
 from discord.ext import commands
@@ -18,7 +19,7 @@ from colorpicker import reactionships, remove_colors, isrgbcolor
 from db import chat, cache
 from logger import log
 from louds import handle_loud_message, import_loud_messages
-from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history
+from markov_generator import fabricate_sentence, create_model, fabricate_message_from_history, get_model_for_user
 from util import strip_mentions
 from webhooks import send_webhook_to_channel
 
@@ -134,6 +135,43 @@ async def be(ctx, identity):
             await send_webhook_to_channel(ctx.channel, content, display_name, user.avatar_url)
             time.sleep(1)
 
+@bot.command()
+async def combine(ctx, query: str):
+
+	# ".be endigy+endig+endi+q+q+q+ q ++++++kosmo"
+	# translates to 
+	# users = [discord.User (endigy), discord.User (q), discord.User (kosmo)]
+	# and bails on user not found
+
+	identities = set(list(filter(None, [x.strip() for x in query.split('+')])))
+
+	users = set([])
+
+	for identity in identities:
+		user = await find_user(ctx, identity) # Replace for wider search later
+		if user:
+			users.add(user)
+		else:	
+			await ctx.channel.send(f'User `{identity}` not found.')
+			return
+
+	if len(users) > 10:
+		await ctx.channel.send(f'**{len(users)}** users? Processing power doesn\'t grow on trees mate')
+		return
+
+	if len(users) < 2:
+		await ctx.channel.send('Please specify at least 2 users')
+		return		
+
+	models = [get_model_for_user(user.id) for user in list(users)]
+
+	combined_model = markovify.combine(models) 
+
+	for i in range(3):
+		sentence = combined_model.make_sentence(tries=100)
+		sentence= strip_mentions(sentence)
+		await ctx.channel.send(sentence)
+
 
 # Generate sentence based on current chat
 @bot.command()
@@ -197,8 +235,8 @@ async def find_user(ctx, identity):
 
     # Search as user in current server
     for user in ctx.channel.guild.members:
-        if user.nick and identity in user.nick.lower() or identity in user.name.lower():
-            return user
+	    if user.nick and identity in user.nick.lower() or identity in user.name.lower():
+	        return user
 
     # Search as name in users cache
     substring = re.compile(fr'{identity}', re.I)
