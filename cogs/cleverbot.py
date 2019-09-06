@@ -1,44 +1,40 @@
-'''
-TODO: Clean()
-'''
-
-
-import discord
-from utils import clean
-from discord.ext import commands
 import asyncio
-from hashlib import md5
-from collections import deque
+import discord
 from aiohttp import ClientSession
+from cleverbot import Cleverbot
 from collections import OrderedDict
+from collections import deque
+from discord.ext import commands
+from hashlib import md5
 from urllib.parse import quote as qs
+from utils import clean
 
 
-class Conversation(commands.Cog, name="Conversation"):
+class Cleverbot(commands.Cog, name="Cleverbot"):
     """SimpleCog"""
 
     def __init__(self, bot):
         self.bot = bot
-        self.brain = Cleverbot()
+        self.bot.brain = CleverbotManager()
 
     @commands.command()
     @commands.bot_has_permissions(send_messages=True)
     async def c(self, ctx, *, message: str):
         message = clean(message)
-        print(f'Sending: {message}')
         if message:
-            response = await self.brain.ask(message)
-            if response:
-                response = clean(response, escape_markdown=True)
+            async with ctx.typing():
+                response = await self.bot.brain.ask(message)
                 if response:
-                    await ctx.send(response)
+                    response = clean(response, escape_markdown=True)
+                    if response:
+                        await ctx.send(response)
 
 
 class CleverbotException(Exception):
     pass
 
 
-class Cleverbot:
+class CleverbotManager:
     """ Cleverbot public API Session wrapper for python """
 
     # constants used for interacting
@@ -194,4 +190,4 @@ class Cleverbot:
 
 
 def setup(bot):
-    bot.add_cog(Conversation(bot))
+    bot.add_cog(Cleverbot(bot))
