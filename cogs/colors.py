@@ -1,7 +1,10 @@
+import re
 import discord
-import asyncio
 from discord.ext import commands
-from utils import is_hex_color_code
+
+
+def is_hex_color_code(s: str):
+    return bool(re.match('[a-fA-F0-9]{6}$', s))
 
 
 class Colors(commands.Cog):

@@ -4,6 +4,7 @@ import random
 import os
 from utils import clean
 import aiohttp
+from geopy.geocoders import Nominatim
 
 
 class Weather(commands.Cog):
@@ -11,53 +12,49 @@ class Weather(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         try:
-            self.wapi = os.environ['OPENWEATHER_API']
+            self.api_key = os.environ['DARKSKY_API_KEY']
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
     @commands.command(aliases=['temp'])
-    async def weather(self, ctx, *, location):
+    async def weather(self, ctx, *, query):
 
-        if('Cleverbot' in self.bot.cogs) and self.bot.brain:
+        # Chance of snarky response
+        if 'Cleverbot' in self.bot.cogs:
             if random.random() < self.bot.cfg['weather-cleverbot-chance']:
                 async with ctx.typing():
-                    query = f"What's the weather in {clean(location)}?"
+                    query = f"What's the weather in {clean(query)}?"
                     response = clean(await self.bot.brain.ask(query))
                     if response:
                         await ctx.send(response)
                         return
 
-        w = await self.get_weather(location)
+        # Get actual weather
+        geolocator = Nominatim()
+        location = geolocator.geocode(query)
+        if not location:
+            await ctx.message.add_reaction("❌")
+            return
 
-        if w:
-            temperature = w['main']['temp']
-            details = w['weather'][0]['description']
-            humidity = w['main']['humidity']
-            wind_speed = w['wind']['speed']
-            country = w['sys']['country']
-            city = w['name']
-
-            embed = discord.Embed(
-                title=f'{city}, {country}',
-                description=f'{int(temperature)}°C, {details[0].upper() + details[1:]}')
-
-            embed.add_field(name="Humidity", value=f'{humidity}%', inline=True)
-            embed.add_field(name="Wind speed", value=f'{wind_speed} km/h', inline=True)
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Not found")
-
-    async def get_weather(self, location):
-        api_url = "http://api.openweathermap.org/data/2.5/weather?q="
-        parameters = "{}&units=metric&appid={}".format(
-            location, self.wapi)
-
+        url = f'https://api.darksky.net/forecast/{self.api_key}/{location.latitude},{location.longitude}?units=ca'
         async with aiohttp.ClientSession() as session:
-            response = await session.get(api_url + parameters)
-            json = await response.json()
-            print(json)
-            return json
+            async with session.get(url) as resp:
+                data = await resp.json()
 
+        summary = data['currently']['summary']
+        temp = data['currently']['temperature']
+        humidity = data['currently']['humidity']
+        wind_speed = data['currently']['windSpeed']
+        pred = data['hourly']['summary']
+        # map = f'http://www.google.com/maps/place/{location.latitude},{location.longitude}'
+
+        # Announce to channel
+        embed = discord.Embed(description=f'{summary} ･ _{pred}_', color=0x7fffd4)
+        embed.add_field(name='**:thermometer:️ Temp**', value=f'{int(temp)}°C ･ {int(temp*1.8+32)}°F', inline=True)
+        embed.add_field(name='💧 **Humidity**', value=f'{int(humidity*100)}%', inline=True)
+        embed.add_field(name="🍃 **Wind**", value=f'{wind_speed} km/h ･ {int(wind_speed*0.621371)} mph', inline=True)
+        embed.set_footer(text=location.address)
+        await ctx.send(embed=embed)
 
 def setup(bot):
     bot.add_cog(Weather(bot))

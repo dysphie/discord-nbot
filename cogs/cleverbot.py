@@ -1,7 +1,5 @@
 import asyncio
-import discord
 from aiohttp import ClientSession
-from cleverbot import Cleverbot
 from collections import OrderedDict
 from collections import deque
 from discord.ext import commands
@@ -10,12 +8,11 @@ from urllib.parse import quote as qs
 from utils import clean
 
 
-class Cleverbot(commands.Cog, name="Cleverbot"):
-    """SimpleCog"""
+class Conversation(commands.Cog, name="Conversation"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.bot.brain = CleverbotManager()
+        self.bot.brain = Cleverbot()
 
     @commands.command()
     @commands.bot_has_permissions(send_messages=True)
@@ -34,7 +31,7 @@ class CleverbotException(Exception):
     pass
 
 
-class CleverbotManager:
+class Cleverbot:
     """ Cleverbot public API Session wrapper for python """
 
     # constants used for interacting
@@ -52,7 +49,7 @@ class CleverbotManager:
         self.session = ClientSession(loop=self.loop)
         self.params['uc'] = 'UseOfficialCleverbotAPI'
         self.headers = {
-            'Origin':  __class__.HOST,
+            'Origin': __class__.HOST,
             'User-Agent': __class__.UA,
             'Referer': __class__.HOST + '/',
             'Cookie': {'XVIS': __class__.XVIS}
@@ -190,4 +187,4 @@ class CleverbotManager:
 
 
 def setup(bot):
-    bot.add_cog(Cleverbot(bot))
+    bot.add_cog(Conversation(bot))

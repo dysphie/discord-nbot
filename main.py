@@ -1,4 +1,3 @@
-import discord
 from discord.ext import commands
 import motor.motor_asyncio
 import os
@@ -15,7 +14,8 @@ class DiscordBot(commands.Bot):
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
-        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.weather']
+        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller',
+                     'cogs.weather', 'cogs.admin']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         super().__init__(command_prefix=commands.when_mentioned_or("."))
@@ -27,6 +27,7 @@ class DiscordBot(commands.Bot):
             except Exception as e:
                 print(f'Failed to load extension {ext}: {e}')
         super().run(self.token, reconnect=True)
+
 
 if __name__ == "__main__":
     DiscordBot().run()
