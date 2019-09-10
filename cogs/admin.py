@@ -7,6 +7,7 @@ class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.has_permissions(administrator=True)
     @commands.command(hidden=True)
     async def load(self, ctx, *, module):
         """Loads a module."""
@@ -17,6 +18,7 @@ class Admin(commands.Cog):
         else:
             await ctx.send('\N{OK HAND SIGN}')
 
+    @commands.has_permissions(administrator=True)
     @commands.command(hidden=True)
     async def unload(self, ctx, *, module):
         """Unloads a module."""
@@ -27,6 +29,7 @@ class Admin(commands.Cog):
         else:
             await ctx.add_reaction("✅")
 
+    @commands.has_permissions(administrator=True)
     @commands.group(name='reload', hidden=True)
     async def reload(self, ctx, *, module):
         """Reloads a module."""
