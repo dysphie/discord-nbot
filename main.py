@@ -15,7 +15,7 @@ class DiscordBot(commands.Bot):
             raise Exception(f'Environment variable {e.args[0]} not set')
 
         self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller',
-                     'cogs.weather', 'cogs.admin']
+                     'cogs.weather', 'cogs.adblock', 'cogs.admin']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         super().__init__(command_prefix=commands.when_mentioned_or("."))
