@@ -15,17 +15,17 @@ class DiscordBot(commands.Bot):
             raise Exception(f'Environment variable {e.args[0]} not set')
 
         self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller',
-                     'cogs.weather', 'cogs.admin']
+                     'cogs.weather', 'cogs.admin', 'cogs.ca-updates']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         super().__init__(command_prefix=commands.when_mentioned_or("."))
 
     def run(self):
         for ext in self.exts:
-            try:
-                self.load_extension(ext)
-            except Exception as e:
-                print(f'Failed to load extension {ext}: {e}')
+            # try:
+            self.load_extension(ext)
+            # except Exception as e:
+            #    print(f'{ext}: {e}')
         super().run(self.token, reconnect=True)
 
 
