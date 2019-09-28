@@ -5,3 +5,4 @@ motor
 PyYAML
 dnspython
 beautifulsoup4
+nltk
