@@ -10,6 +10,7 @@ from discord.ext import commands
 from pymongo import ReturnDocument
 from pymongo.errors import ConnectionFailure
 from aesthetics import *
+import asyncio
 
 FFZ_API = 'https://api.frankerfacez.com/v1'
 
@@ -109,7 +110,7 @@ class FFZ(commands.Cog):
             return
 
         # Upload emotes to server and remember them
-        dumpster = [message]
+        dumpster = []
         for i in wanted_emotes:
             emote = await self.create_emote_from_ffz_name(i, message.guild)
             emote and dumpster.append(emote)
@@ -119,6 +120,7 @@ class FFZ(commands.Cog):
         await send_as(message.author, message.content, message.channel)
 
         # TODO: Don't wait arbitrarily. Do proper callback
+        await message.delete()
         await asyncio.sleep(2)
         for item in dumpster:
             await item.delete()
