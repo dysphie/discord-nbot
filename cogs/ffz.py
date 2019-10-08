@@ -117,6 +117,9 @@ class FFZ(commands.Cog):
 
         # Repost message with all emotes replaced. Delete uploaded emotes
         await send_as(message.author, message.content, message.channel)
+
+        # TODO: Don't wait arbitrarily. Do proper callback
+        await asyncio.sleep(2)
         for item in dumpster:
             await item.delete()
 
@@ -207,7 +210,7 @@ class FFZ(commands.Cog):
         else:
             self.users_cache.update_user(user_data)
             await send_success(ctx, f"{'En' if user_data['require_colons'] else 'Dis'}"
-                                    f"abled colon requirement for your user.")
+                               f"abled colon requirement for your user.")
 
     async def create_emote_from_ffz_name(self, name: str, guild):
         url = f'https://cdn.frankerfacez.com/emoticon/{self.emotes_cache.emotes[name]}/1'
