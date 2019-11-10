@@ -5,7 +5,7 @@ from discord.ext import commands
 def is_yell(message: str):
     alph = list(filter(str.isalpha, message))
     percentage = sum(map(str.isupper, alph)) / len(alph)
-    return percentage > 0.85 and len(message.split()) > 3
+    return percentage > 0.85 and len(message.split()) > 2
 
 
 class Yeller(commands.Cog, name="Yeller"):
