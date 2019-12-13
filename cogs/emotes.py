@@ -34,8 +34,8 @@ class Emotes(commands.Cog):
             to_delete.append(emote)
             message.content = message.content.replace(f"${name}", str(emote))
 
-        #if len(to_delete) < 2:
-        #    return
+        if not to_delete:
+            return
 
         try:
             await impersonate(message.author, message.content, message.channel)
