@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import re
 import aiohttp
+import asyncio
 from pymongo.errors import DuplicateKeyError
 
 PAT_CUSTOM_EMOTE = re.compile(r'\$([a-zA-Z0-9]+)')
