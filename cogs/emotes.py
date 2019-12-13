@@ -25,23 +25,30 @@ class Emotes(commands.Cog):
 
         prefixed = re.findall(PAT_CUSTOM_EMOTE, message.content)
 
-        to_delete = [message]
+        to_delete = []
+        #to_delete = [message]
         async for doc in self.bot.db.emotes.find({'name': {'$in': prefixed}}):
             name = doc['name']
             emote = await self.create_emote_from_url(self.storage, name, doc['url'])
             to_delete.append(emote)
             message.content = message.content.replace(f"${name}", str(emote))
 
-        if len(to_delete) < 2:
-            return
+        #if len(to_delete) < 2:
+        #    return
 
         try:
             await impersonate(message.author, message.content, message.channel)
         except:
             pass
         finally:
+            await message.delete()
+            await asyncio.sleep(5)
             for item in to_delete:
                 await item.delete()
+
+            # TODO: Why are these getting deleted before the msg is sent?
+            # for item in to_delete:
+            #    await item.delete()
 
     @staticmethod
     async def create_emote_from_url(guild: discord.Guild, name: str, url: str):

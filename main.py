@@ -19,7 +19,7 @@ class DiscordBot(commands.Bot):
                      'cogs.ca-updates']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
-        super().__init__(command_prefix=commands.when_mentioned_or("?"))
+        super().__init__(command_prefix=commands.when_mentioned_or("."))
 
     def run(self):
         for ext in self.exts:
