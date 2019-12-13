@@ -14,12 +14,12 @@ class DiscordBot(commands.Bot):
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
-        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.ffz',
+        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.emotes',
                      'cogs.weather', 'cogs.adblock', 'cogs.admin',
-                     'cogs.ca-updates', 'cogs.paraphraser']
+                     'cogs.ca-updates']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
-        super().__init__(command_prefix=commands.when_mentioned_or("."))
+        super().__init__(command_prefix=commands.when_mentioned_or("?"))
 
     def run(self):
         for ext in self.exts:
@@ -32,8 +32,8 @@ class DiscordBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         print('Logged in as:')
-        print(bot.user.name)
-        print(bot.user.id)
+        print(self.user.name)
+        print(self.user.id)
         print('-------------------')
 
 
