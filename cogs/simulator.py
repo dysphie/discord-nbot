@@ -42,7 +42,7 @@ class Markov(commands.Cog, name="Markovify"):
     async def be(self, ctx, name):
         user = find(lambda m: name in [m.name, m.display_name], ctx.guild.members)
         if not user:
-            ctx.send('User not found')
+            await ctx.send('User not found')
             return
 
         model = await self.get_user_speech_model(user.id)
