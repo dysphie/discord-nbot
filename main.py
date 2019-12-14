@@ -14,7 +14,7 @@ class DiscordBot(commands.Bot):
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
-        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.emotes',
+        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.emotes', 'cogs.paraphraser',
                      'cogs.weather', 'cogs.adblock', 'cogs.admin', 'cogs.simulator',
                      'cogs.ca-updates']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
