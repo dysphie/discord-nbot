@@ -7,3 +7,4 @@ dnspython
 beautifulsoup4
 nltk
 pymongo
+markovify

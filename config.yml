@@ -2,3 +2,4 @@ color-role-prefix: '🎨'
 weather-cleverbot-chance: 0.25
 game_updates_channel: 540868910166048779
 emote_storage_guild: 336213135193145344
+bot-prefix: '.'
