@@ -1,7 +1,9 @@
-from discord.ext import commands
+import discord
 import motor.motor_asyncio
-import os
 import yaml
+from discord.ext import commands
+from os import listdir, environ
+from os.path import isfile, join
 
 
 class DiscordBot(commands.Bot):
@@ -9,24 +11,23 @@ class DiscordBot(commands.Bot):
     def __init__(self):
 
         try:
-            self.token = os.environ['NBOT_TOKEN']
-            self.db_uri = os.environ['NBOT_DB_URI']
+            self.token = environ['NBOT_TOKEN']
+            self.db_uri = environ['NBOT_DB_URI']
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
-        self.exts = ['cogs.colors', 'cogs.cleverbot', 'cogs.yeller', 'cogs.emotes', 'cogs.paraphraser',
-                     'cogs.weather', 'cogs.adblock', 'cogs.admin', 'cogs.simulator',
-                     'cogs.ca-updates']
         self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         super().__init__(command_prefix=commands.when_mentioned_or(self.cfg['bot-prefix']))
 
     def run(self):
-        for ext in self.exts:
-            # try:
-            self.load_extension(ext)
-            # except Exception as e:
-            # print(f'Failed to load extension {ext}: {e}')
+        cogs_dir = 'cogs'
+        for extension in [f.replace('.py', '') for f in listdir(cogs_dir) if isfile(join(cogs_dir, f))]:
+            try:
+                self.load_extension(cogs_dir + "." + extension)
+            except (discord.ClientException, ModuleNotFoundError):
+                print(f'Failed to load extension {extension}.')
+                traceback.print_exc()
         super().run(self.token, reconnect=True)
 
     @commands.Cog.listener()
