@@ -1,77 +1,71 @@
-import discord
-from discord.ext import commands
 import re
-import aiohttp
-import asyncio
+
+import discord
+from aiohttp import ClientSession
+from discord import HTTPException
+from discord.ext import commands
 from pymongo.errors import DuplicateKeyError
 
-PAT_CUSTOM_EMOTE = re.compile(r'\$([a-zA-Z0-9]+)')
+INVISIBLE_CHAR = '\u17B5'
+EMOTE_PATTERN = re.compile(r'\$([^\s$]+)')
 
-# cogs must now subclass commands.Cog
+
 class Emotes(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
-        self.session = aiohttp.ClientSession()
+        self.emotedb = bot.db.emotes
+        self.session = ClientSession()
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.storage = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
-
-    # listeners now must have a decorator
     @commands.Cog.listener()
     async def on_message(self, message):
 
         if message.author.bot:
             return
 
-        prefixed = re.findall(PAT_CUSTOM_EMOTE, message.content)
-
+        prefixed = EMOTE_PATTERN.findall(message.content)
         to_delete = []
-        #to_delete = [message]
-        async for doc in self.bot.db.emotes.find({'name': {'$in': prefixed}}):
+
+        pipe = [
+            {'$match': {'name': {'$in': prefixed}}},
+            {'$project': {'name': 1, 'url': 1, 'length': {'$strLenCP': '$name'}}},
+            {'$sort': {'length': -1}}
+        ]
+
+        async for doc in self.emotedb.aggregate(pipeline=pipe):
             name = doc['name']
-            emote = await self.create_emote_from_url(self.storage, name, doc['url'])
-            to_delete.append(emote)
-            message.content = message.content.replace(f"${name}", str(emote))
+            emote = await self.create_emote_from_url(message.channel.guild, name, doc['url'])
+            if emote:
+                to_delete.append(emote)
+                message.content = message.content.replace(f"${name}", str(emote))
 
-        if not to_delete:
-            return
+        if to_delete:
+            to_delete.append(message)
 
-        try:
-            await impersonate(message.author, message.content, message.channel)
-        except:
-            pass
-        finally:
-            await message.delete()
-            await asyncio.sleep(5)
-            for item in to_delete:
-                await item.delete()
+            sent = await self.impersonate(message.author, message.content, message.channel)
+            if sent:
+                for trash in to_delete:
+                    await trash.delete()
 
-            # TODO: Why are these getting deleted before the msg is sent?
-            # for item in to_delete:
-            #    await item.delete()
-
-    @staticmethod
-    async def create_emote_from_url(guild: discord.Guild, name: str, url: str):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                image_bytes = await response.read()
+    async def create_emote_from_url(self, guild, name: str, url: str):
+        async with self.session.get(url) as response:
+            image_bytes = await response.read()
+            try:
                 emote = await guild.create_custom_emoji(name=name, image=image_bytes)
+            except HTTPException as e:
+                pass
+            else:
                 return emote
-
-    @commands.command()
-    async def echo(self, ctx, *, message):
-        await ctx.send(message)
 
     @commands.command()
     async def add(self, ctx, name, url):
         try:
             emote = await self.create_emote_from_url(ctx.guild, name, url)
         except discord.HTTPException as e:
-            ctx.send(e)
+            await ctx.send(e)
         else:
             try:
-                result = await self.bot.db.emotes.insert_one({
+                await self.bot.db.emotes.insert_one({
                     'owner': ctx.author.id,
                     'name': name,
                     'url': str(emote.url)
@@ -88,24 +82,37 @@ class Emotes(commands.Cog):
         doc = await self.bot.db.emotes.find_one_and_delete({'name': name, ctx.author: ctx.author.id})
         await ctx.send(doc)
 
+    async def impersonate(self, member: discord.Member, message: str, channel: discord.TextChannel):
+        """Post a webhook that looks like a message sent by the user."""
+
+        # Webhook usernames require at least 2 characters
+        username = member.display_name.ljust(2, INVISIBLE_CHAR)
+
+        # webhook = discord.utils.find(lambda m: m.user == self.bot.user, channel.guild.webooks())
+
+        our_webhook = None
+        webhooks = await channel.webhooks()
+        for webhook in webhooks:
+            if webhook.user == self.bot.user:
+                our_webhook = webhook
+
+        if not our_webhook:
+            our_webhook = await channel.create_webhook(name='NBot')
+
+        message = await our_webhook.send(
+            username=username,
+            content=message,
+            avatar_url=member.avatar_url,
+            wait=True
+        )
+
+        return message
+
 
 def setup(bot):
     bot.add_cog(Emotes(bot))
 
 
-INVISIBLE_CHAR = '\u17B5'
 
-async def impersonate(member: discord.Member, message: str, channel: discord.TextChannel):
-    """Post a webhook that looks like a message sent by the user."""
 
-    # Webhook usernames require at least 2 characters
-    username = member.display_name.ljust(2, INVISIBLE_CHAR)
-
-    webhook = await channel.create_webhook(name='temp')
-    await webhook.send(
-        username=username,
-        content=message,
-        avatar_url=member.avatar_url
-    )
-    await webhook.delete()
 

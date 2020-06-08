@@ -1,3 +1,5 @@
+import traceback
+
 import discord
 import motor.motor_asyncio
 import yaml
