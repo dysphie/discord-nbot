@@ -11,7 +11,7 @@ class Starboard(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.starchannel = await self.bot.fetch_channel(719448050451349566)
+        self.starchannel = self.bot.get_channel(self.bot.cfg['starboard_channel'])
 
     @commands.Cog.listener()
     @commands.guild_only()
