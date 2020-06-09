@@ -27,13 +27,13 @@ class Emotes(commands.Cog):
         to_delete = []
 
         pipe = [
-            {'$match': {'name': {'$in': prefixed}}},
-            {'$project': {'name': 1, 'url': 1, 'length': {'$strLenCP': '$name'}}},
+            {'$match': {'_id': {'$in': prefixed}}},
+            {'$project': {'_id': 1, 'url': 1, 'length': {'$strLenCP': '$_id'}}},
             {'$sort': {'length': -1}}
         ]
 
         async for doc in self.emotedb.aggregate(pipeline=pipe):
-            name = doc['name']
+            name = doc['_id']
             emote = await self.create_emote_from_url(message.channel.guild, name, doc['url'])
             if emote:
                 to_delete.append(emote)
@@ -67,7 +67,7 @@ class Emotes(commands.Cog):
             try:
                 await self.bot.db.emotes.insert_one({
                     'owner': ctx.author.id,
-                    'name': name,
+                    '_id': name,
                     'url': str(emote.url)
                 })
             except DuplicateKeyError:
@@ -79,7 +79,7 @@ class Emotes(commands.Cog):
 
     @commands.command()
     async def remove(self, ctx, name):
-        doc = await self.bot.db.emotes.find_one_and_delete({'name': name, ctx.author: ctx.author.id})
+        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, ctx.author: ctx.author.id})
         await ctx.send(doc)
 
     async def impersonate(self, member: discord.Member, message: str, channel: discord.TextChannel):
