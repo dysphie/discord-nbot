@@ -1,8 +1,4 @@
-import os
-import traceback
-
 import aiohttp
-import discord
 import motor.motor_asyncio
 import yaml
 from discord.ext import commands
