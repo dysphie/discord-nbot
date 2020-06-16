@@ -1,7 +1,6 @@
 import re
 
 import discord
-from aiohttp import ClientSession
 from discord import HTTPException
 from discord.ext import commands
 from pymongo.errors import DuplicateKeyError
@@ -15,7 +14,7 @@ class Emotes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.emotedb = bot.db.emotes
-        self.session = ClientSession()
+        self.session = bot.session
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -87,26 +86,19 @@ class Emotes(commands.Cog):
 
         # Webhook usernames require at least 2 characters
         username = member.display_name.ljust(2, INVISIBLE_CHAR)
+        utils = self.bot.get_cog('Utils')
+        if not utils:
+            return
 
-        # webhook = discord.utils.find(lambda m: m.user == self.bot.user, channel.guild.webooks())
+        webhook = await utils.get_webhook_for_channel(channel)
+        if webhook:
+            message = await webhook.send(
+                username=username,
+                content=message,
+                avatar_url=member.avatar_url,
+                wait=True)
 
-        our_webhook = None
-        webhooks = await channel.webhooks()
-        for webhook in webhooks:
-            if webhook.user == self.bot.user:
-                our_webhook = webhook
-
-        if not our_webhook:
-            our_webhook = await channel.create_webhook(name='NBot')
-
-        message = await our_webhook.send(
-            username=username,
-            content=message,
-            avatar_url=member.avatar_url,
-            wait=True
-        )
-
-        return message
+            return message
 
 
 def setup(bot):

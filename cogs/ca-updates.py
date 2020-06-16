@@ -9,7 +9,7 @@ EMBED_BANNER = "https://forums.valofe.com/filedata/fetch?id=17922&d=1560921134"
 EMBED_THUMB = "https://i.imgur.com/nBQbe9R.png"
 EMBED_WARNING = "**⚠️ Caution**: Distressing content; reader discretion is advised."
 
-
+# TODO: Use bot.session
 async def url_to_soup(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:

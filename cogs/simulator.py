@@ -5,15 +5,14 @@
 #   Move impersonate function to utils cog for DRY
 import zlib
 
-import aiohttp
 import discord
 import markovify
 from discord.ext import commands
 from discord.utils import find, escape_mentions
 from io import StringIO
-from discord import Webhook, AsyncWebhookAdapter
 
 INVISIBLE_CHAR = '\u17B5'
+MAX_NAME_LENGTH = 32
 
 
 class DiscordText(markovify.NewlineText):
@@ -26,17 +25,9 @@ class Markov(commands.Cog, name="Markovify"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.task = self.bot.loop.create_task(self.initialize())
-        self.history  = bot.db['chat_archive']
-        self.models   = bot.db['markov.models']
-        self.webhooks = bot.db['webhooks']
-
-    async def initialize(self):
-        self.session = aiohttp.ClientSession()
-
-    def cog_unload(self):
-        self.task.cancel()
-        self.session.close()
+        self.session = bot.session
+        self.history = bot.db['chat_archive']
+        self.models = bot.db['markov.models']
 
     @commands.command()
     async def be(self, ctx, name):
@@ -51,7 +42,6 @@ class Markov(commands.Cog, name="Markovify"):
                 content = escape_mentions(model.make_sentence(tries=100))
                 content and await self.simulate_user(user, content, ctx.message.channel)
 
-
     async def get_user_speech_model(self, uid: int) -> DiscordText:
         model = await self.models.find_one({'_id': uid})
         if model:
@@ -59,7 +49,6 @@ class Markov(commands.Cog, name="Markovify"):
         else:
             model = await self.create_user_speech_model(uid)
         return model
-
 
     async def create_user_speech_model(self, uid: int):
         messages = self.history.find({'a': uid}, {'m': 1, '_id': 0})
@@ -74,39 +63,32 @@ class Markov(commands.Cog, name="Markovify"):
         packed_model = zlib.compress(model.to_json().encode('utf-8'), level=9)
         await self.models.update_one(
             {'_id': uid},
-            {'$set': {'m': packed_model }},
+            {'$set': {'m': packed_model}},
             upsert=True)
 
-    async def create_corpus_from_message_history(self, messages):
+    @staticmethod
+    async def create_corpus_from_message_history(messages):
         f = StringIO()
         async for doc in messages:
             f.write(doc['m'])
             f.write('\n')
         return f.getvalue()
 
+    async def simulate_user(self, member: discord.Member, content: str, channel: discord.TextChannel):
+        utils = self.bot.get_cog('Utils')
+        if not utils:
+            return
 
-    async def simulate_user(self, member: discord.Member, message: str, channel: discord.TextChannel):
+        suffix = ' Simulator'
+        maxlen = MAX_NAME_LENGTH - len(suffix)
+        username = utils.truncate_string(member.display_name, maxlen) + suffix
 
-        username = member.name[:20] + (member.name[20:] and ' ..') + ' Simulator'
-
-        webhook = await self.get_webhook_for_channel(channel)
-        await webhook.send(
-            username=username,
-            content=message,
-            avatar_url=member.avatar_url
-        )
-
-
-    async def get_webhook_for_channel(self, channel):
-        data = await self.webhooks.find_one({'_id': channel.id})
-        if not data:
-            webhook = await channel.create_webhook(name='test')
-            data = { '_id': channel.id, 'wid': webhook.id, 'token': webhook.token }
-            await self.webhooks.insert_one(data)
-
-        webhook = Webhook.partial(data['wid'], data['token'], adapter=AsyncWebhookAdapter(self.session))
-        return webhook
-
+        webhook = await utils.get_webhook_for_channel(channel)
+        if webhook:
+            await webhook.send(
+                username=username,
+                content=content,
+                avatar_url=member.avatar_url)
 
 
 def setup(bot):

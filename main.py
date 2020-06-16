@@ -1,44 +1,54 @@
+import os
 import traceback
 
+import aiohttp
 import discord
 import motor.motor_asyncio
 import yaml
 from discord.ext import commands
-from os import listdir, environ
-from os.path import isfile, join
+from os import environ
+import sys
+import traceback
+from pathlib import Path
+
+
+class CustomContext(commands.Context):  # TODO
+    pass
 
 
 class DiscordBot(commands.Bot):
 
     def __init__(self):
-
-        try:
-            self.token = environ['NBOT_TOKEN']
-            self.db_uri = environ['NBOT_DB_URI']
-        except KeyError as e:
-            raise Exception(f'Environment variable {e.args[0]} not set')
-
-        self.db = motor.motor_asyncio.AsyncIOMotorClient(self.db_uri)['nbot']
+        super().__init__(command_prefix='.')
+        self.db = motor.motor_asyncio.AsyncIOMotorClient(environ['NBOT_DB_URI'])['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
-        super().__init__(command_prefix=commands.when_mentioned_or(self.cfg['bot-prefix']))
+        self.task = self.loop.create_task(self.__ainit__())
 
-    def run(self):
-        cogs_dir = 'cogs'
-        for extension in [f.replace('.py', '') for f in listdir(cogs_dir) if isfile(join(cogs_dir, f))]:
-            try:
-                self.load_extension(cogs_dir + "." + extension)
-            except (discord.ClientException, ModuleNotFoundError):
-                print(f'Failed to load extension {extension}.')
-                traceback.print_exc()
-        super().run(self.token, reconnect=True)
+    async def __ainit__(self):
+        self.session = aiohttp.ClientSession(loop=self.loop)
+        self.load_extensions()
+
+    def cog_unload(self):
+        self.task.cancel()
+        self.session.close()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print('Logged in as:')
-        print(self.user.name)
-        print(self.user.id)
-        print('-------------------')
+        print(f'Logged in as {self.user.name} (ID: {self.user.id})')
+
+    async def get_context(self, message, *, cls=CustomContext):
+        return await super().get_context(message, cls=cls)
+
+    def load_extensions(self):
+        for file in Path('cogs').glob('**/*.py'):
+            *tree, _ = file.parts
+            try:
+                self.load_extension(f"{'.'.join(tree)}.{file.stem}")
+            except Exception as e:
+                traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
+            else:
+                print(f'Loaded extension {file.stem}')
 
 
 if __name__ == "__main__":
-    DiscordBot().run()
+    DiscordBot().run(environ['NBOT_TOKEN'])
