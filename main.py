@@ -1,6 +1,7 @@
 import aiohttp
 import motor.motor_asyncio
 import yaml
+from discord import Game
 from discord.ext import commands
 from os import environ
 import sys
@@ -31,6 +32,7 @@ class DiscordBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f'Logged in as {self.user.name} (ID: {self.user.id})')
+        await self.change_presence(activity=Game(name="Red Canyon"))
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
