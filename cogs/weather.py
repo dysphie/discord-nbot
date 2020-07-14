@@ -18,7 +18,7 @@ class Weather(commands.Cog):
     async def weather(self, ctx, *, query):
 
         # Get actual weather
-        geolocator = Nominatim()
+        geolocator = Nominatim(user_agent="nbot")
         location = geolocator.geocode(query)
         if not location:
             await ctx.message.add_reaction("❌")
