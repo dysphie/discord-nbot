@@ -15,6 +15,11 @@ class Emotes(commands.Cog):
         self.bot = bot
         self.emotedb = bot.db.emotes
         self.session = bot.session
+        self.storage = None
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.storage = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -33,7 +38,7 @@ class Emotes(commands.Cog):
 
         async for doc in self.emotedb.aggregate(pipeline=pipe):
             name = doc['_id']
-            emote = await self.create_emote_from_url(message.channel.guild, name, doc['url'])
+            emote = await self.create_emote_from_url(name, doc['url'])
             if emote:
                 to_delete.append(emote)
                 message.content = message.content.replace(f"${name}", str(emote))
@@ -46,20 +51,21 @@ class Emotes(commands.Cog):
                 for trash in to_delete:
                     await trash.delete()
 
-    async def create_emote_from_url(self, guild, name: str, url: str):
+    async def create_emote_from_url(self, name: str, url: str):
         async with self.session.get(url) as response:
             image_bytes = await response.read()
             try:
-                emote = await guild.create_custom_emoji(name=name, image=image_bytes)
+                emote = await self.storage.create_custom_emoji(name=name, image=image_bytes)
             except HTTPException as e:
                 pass
             else:
                 return emote
 
+
     @commands.command()
     async def add(self, ctx, name, url):
         try:
-            emote = await self.create_emote_from_url(ctx.guild, name, url)
+            emote = await self.create_emote_from_url(name, url)
         except discord.HTTPException as e:
             await ctx.send(e)
         else:
