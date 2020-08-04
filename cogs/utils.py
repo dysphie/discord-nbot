@@ -1,3 +1,4 @@
+import discord
 from discord import TextChannel
 from discord.ext import commands
 
@@ -20,6 +21,16 @@ class Utils(commands.Cog):
     @staticmethod
     def truncate_string(s: str, maxlen: int, suffix='..'):
         return s[:maxlen - len(suffix)] + suffix if len(s) > maxlen else s
+
+    @staticmethod
+    def lazyfind_user(guild: discord.Guild, name: str):
+        for member in guild.members:
+            if name == member.id:
+                return member
+
+            for alias in [member.name, member.display_name]:
+                if name.lower() in alias.lower():
+                    return member
 
 
 def setup(bot):

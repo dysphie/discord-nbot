@@ -36,19 +36,23 @@ class Markov(commands.Cog, name="Markovify"):
         if not name:
             user = ctx.user
         else:
-            for m in ctx.guild.members:
-                if name.lower() in [n.lower() for n in [m.name, m.display_name]]:
-                    user = m
+            utils = self.bot.get_cog('Utils')
+            if utils:
+                user = utils.lazyfind_user(ctx.guild, name)
 
         if not user:
             await ctx.send('User not found')
             return
 
+        await ctx.message.add_reaction("⌛")
         model = await self.get_user_speech_model(user.id)
         if model:
             for i in range(3):
                 content = escape_mentions(model.make_sentence(tries=100))
                 content and await self.simulate_user(user, content, ctx.message.channel)
+        else:
+            await ctx.send('lmao something is fucked')
+        await ctx.message.remove_reaction("⌛", self.bot.user)
 
     async def get_user_speech_model(self, uid: int) -> DiscordText:
         model = await self.models.find_one({'_id': uid})
