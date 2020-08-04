@@ -1,107 +1,105 @@
-# TODO:
-#   Automatically regenerate models after a while
-#   Automatically save user messages
-#   Better webhook username suffix logic
-#   Move impersonate function to utils cog for DRY
+import re
 import zlib
-
-import discord
-import markovify
-from discord.ext import commands
-from discord.utils import find, escape_mentions
 from io import StringIO
 
-INVISIBLE_CHAR = '\u17B5'
+from discord import TextChannel, User
+from discord.ext import commands
+from markovify import NewlineText
+from motor import motor_asyncio
+from nltk import pos_tag
+
+from cogs import utils
+
 MAX_NAME_LENGTH = 32
 
 
-class DiscordText(markovify.NewlineText):
-    # github.com/jsvine/markovify/issues/84
-    def test_sentence_input(self, sentence):
-        return True
+class NltkText(NewlineText):
+    def word_split(self, sentence):
+        words = re.split(self.word_split_pattern, sentence)
+        words = [word for word in words if word]
+        words = ["::".join(tag) for tag in pos_tag(words)]
+        return words
+
+    def word_join(self, words):
+        sentence = " ".join(word.split("::")[0] for word in words)
+        return sentence
 
 
-class Markov(commands.Cog, name="Markovify"):
+class Parrot(commands.Cog, name="Parrot"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.session = bot.session
+        self.models = bot.db['markov_models']
         self.history = bot.db['chat_archive']
-        self.models = bot.db['markov.models']
 
-    @commands.command()
-    async def be(self, ctx, name):
+    @commands.command(aliases=["b", "be", "imp"])
+    async def parrot(self, ctx, name):
 
-        user = None
-        if not name:
-            user = ctx.user
-        else:
-            utils = self.bot.get_cog('Utils')
-            if utils:
-                user = utils.lazyfind_user(ctx.guild, name)
-
+        user = utils.lazyfind_user(ctx.guild, name)
         if not user:
-            await ctx.send('User not found')
             return
 
-        await ctx.message.add_reaction("⌛")
-        model = await self.get_user_speech_model(user.id)
-        if model:
-            for i in range(3):
-                content = escape_mentions(model.make_sentence(tries=100))
-                content and await self.simulate_user(user, content, ctx.message.channel)
-        else:
-            await ctx.send('Apologies, something is fucked')
-        await ctx.message.remove_reaction("⌛", self.bot.user)
+        model = await self.fetch_user_model(user.id)
+        if not model:
+            await ctx.send(f'Generating speech model for {user.display_name}..')
+            model = await self.create_model_for_user(user.id)
+            if not model:
+                await ctx.send('Apologies but something is fucked')
+                return
 
-    async def get_user_speech_model(self, uid: int) -> DiscordText:
-        model = await self.models.find_one({'_id': uid})
-        if model:
-            model = DiscordText.from_json(zlib.decompress(model['msg']))
-        else:
-            model = await self.create_user_speech_model(uid)
-        return model
+        for i in range(3):
+            sentence = model.make_sentence(tries=100)
+            if sentence:
+                await self.parrot_user(user, ctx.channel, sentence)
 
-    async def create_user_speech_model(self, uid: int):
-        messages = self.history.find({'author': uid}, {'msg': 1, '_id': 0})
-        if messages:
-            corpus = await self.create_corpus_from_message_history(messages)
-            if corpus:
-                model = DiscordText(corpus)
-                await self.store_user_speech_model(model, uid)
-                return model
+    async def fetch_user_model(self, user_id: int):
+        result = await self.models.find_one({'_id': user_id}, {'msg': 1})
+        if result:
+            return NltkText.from_json(zlib.decompress(result['msg']))
 
-    async def store_user_speech_model(self, model, uid: int):
+    async def save_user_model(self, user_id: int, model):
         packed_model = zlib.compress(model.to_json().encode('utf-8'), level=9)
         await self.models.update_one(
-            {'_id': uid},
+            {'_id': user_id},
             {'$set': {'msg': packed_model}},
             upsert=True)
 
+    async def create_model_for_user(self, user_id: int):
+        results = self.history.find({'author': user_id}, {'msg': 1})
+
+        f = StringIO()
+        async for doc in results:
+            f.write(doc['msg'])
+            f.write('\n')
+
+        model = NltkText(f.getvalue(), well_formed=False)
+        if model:
+            await self.save_user_model(user_id, model)
+            return model
+
     @staticmethod
-    async def create_corpus_from_message_history(messages):
+    async def create_corpus_from_message_history(messages: motor_asyncio.AsyncIOMotorCursor):
         f = StringIO()
         async for doc in messages:
             f.write(doc['msg'])
             f.write('\n')
         return f.getvalue()
 
-    async def simulate_user(self, member: discord.Member, content: str, channel: discord.TextChannel):
-        utils = self.bot.get_cog('Utils')
-        if not utils:
+    async def parrot_user(self, user: User, channel: TextChannel, content: str):
+        utils_cog = self.bot.get_cog('Utils')
+        if not utils_cog:
+            return
+
+        webhook = await utils_cog.get_webhook_for_channel(channel)
+        if not webhook:
             return
 
         suffix = ' Simulator'
         maxlen = MAX_NAME_LENGTH - len(suffix)
-        username = utils.truncate_string(member.display_name, maxlen) + suffix
+        username = utils.truncate_string(user.display_name, maxlen) + suffix
 
-        webhook = await utils.get_webhook_for_channel(channel)
-        if webhook:
-            await webhook.send(
-                username=username,
-                content=content,
-                avatar_url=member.avatar_url)
+        await webhook.send(username=username, content=content, avatar_url=user.avatar_url)
 
 
 def setup(bot):
-    bot.add_cog(Markov(bot))
+    bot.add_cog(Parrot(bot))
