@@ -5,7 +5,7 @@ beautifulsoup4
 cffi
 chardet
 click
-discord.py
+git+https://github.com/Rapptz/discord.py@master#egg=discord.py
 dnspython
 geographiclib
 geopy

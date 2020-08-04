@@ -1,7 +1,7 @@
 import aiohttp
+import discord
 import motor.motor_asyncio
 import yaml
-from discord import Game
 from discord.ext import commands
 from os import environ
 import sys
@@ -16,7 +16,10 @@ class CustomContext(commands.Context):  # TODO
 class DiscordBot(commands.Bot):
 
     def __init__(self):
-        super().__init__(command_prefix='.')
+        super().__init__(
+            command_prefix='.',
+            allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=False)
+        )
         self.db = motor.motor_asyncio.AsyncIOMotorClient(environ['NBOT_DB_URI'])['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         self.task = self.loop.create_task(self.__ainit__())
@@ -32,7 +35,6 @@ class DiscordBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f'Logged in as {self.user.name} (ID: {self.user.id})')
-        await self.change_presence(activity=Game(name="Red Canyon"))
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
