@@ -31,7 +31,15 @@ class Markov(commands.Cog, name="Markovify"):
 
     @commands.command()
     async def be(self, ctx, name):
-        user = find(lambda m: name in [m.name, m.display_name], ctx.guild.members)
+
+        user = None
+        if not name:
+            user = ctx.user
+        else:
+            for m in ctx.guild.members:
+                if name.lower() in [n.lower() for n in [m.name, m.display_name]]:
+                    user = m
+
         if not user:
             await ctx.send('User not found')
             return
