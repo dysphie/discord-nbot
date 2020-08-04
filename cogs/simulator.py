@@ -51,19 +51,19 @@ class Markov(commands.Cog, name="Markovify"):
                 content = escape_mentions(model.make_sentence(tries=100))
                 content and await self.simulate_user(user, content, ctx.message.channel)
         else:
-            await ctx.send('lmao something is fucked')
+            await ctx.send('Apologies, something is fucked')
         await ctx.message.remove_reaction("⌛", self.bot.user)
 
     async def get_user_speech_model(self, uid: int) -> DiscordText:
         model = await self.models.find_one({'_id': uid})
         if model:
-            model = DiscordText.from_json(zlib.decompress(model['m']))
+            model = DiscordText.from_json(zlib.decompress(model['msg']))
         else:
             model = await self.create_user_speech_model(uid)
         return model
 
     async def create_user_speech_model(self, uid: int):
-        messages = self.history.find({'a': uid}, {'m': 1, '_id': 0})
+        messages = self.history.find({'author': uid}, {'msg': 1, '_id': 0})
         if messages:
             corpus = await self.create_corpus_from_message_history(messages)
             if corpus:
@@ -75,14 +75,14 @@ class Markov(commands.Cog, name="Markovify"):
         packed_model = zlib.compress(model.to_json().encode('utf-8'), level=9)
         await self.models.update_one(
             {'_id': uid},
-            {'$set': {'m': packed_model}},
+            {'$set': {'msg': packed_model}},
             upsert=True)
 
     @staticmethod
     async def create_corpus_from_message_history(messages):
         f = StringIO()
         async for doc in messages:
-            f.write(doc['m'])
+            f.write(doc['msg'])
             f.write('\n')
         return f.getvalue()
 
