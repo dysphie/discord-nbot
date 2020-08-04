@@ -61,7 +61,6 @@ class Emotes(commands.Cog):
             else:
                 return emote
 
-
     @commands.command()
     async def add(self, ctx, name, url):
         try:
@@ -84,7 +83,7 @@ class Emotes(commands.Cog):
 
     @commands.command()
     async def remove(self, ctx, name):
-        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, ctx.author: ctx.author.id})
+        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
         await ctx.send(doc)
 
     async def impersonate(self, member: discord.Member, message: str, channel: discord.TextChannel):
