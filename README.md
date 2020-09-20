@@ -4,7 +4,9 @@ Discord bot for communities I like
 
 
 ### Custom color roles
-Change your name color. Usage: `.colorme <hex code>`
+Change your name color.
+
+Usage: `.colorme <hex code>`
 
 ### Poor Man's Nitro / FrankerFaceZ integration
 Replaces shorthand words prefixed with `$` with their corresponding FrankerFaceZ/BetterTV emotes.
@@ -17,7 +19,9 @@ Output: `hello world <:peepoHappy:723458485395914753>`
 Removes sponsored embeds from PatchBot update announcements.
 
 ### Cleverbot Integration
-Talk to cleverbot and get a response back. Usage: `.be <message>`
+Talk to cleverbot and get a response back. 
+
+Usage: `.be <message>`
 
 ### Chat Message Logger
 Log chat messages (for use in Parrot and Yeller)
@@ -29,14 +33,17 @@ Usage: `.be <username/nickname>`
 
 ### Complainer
 Wrapper for Scott Pakin's automatic complaint-letter generator
+
 Usage: `.complain <male/female/company>`
 
 ### Paraphraser
 Paraphrase the input sentence using Natural Language Toolkit (NLTK)
+
 Usage: `$$ <sentence>`
 
 ### Weather
 Check the weather for a city, state, country, etc. (powered by Dark Sky)
+
 Usage: `.weather <location>`
 
 ### Starboard
@@ -44,6 +51,7 @@ Pin messages in a starboard by reacting to them with "⭐"
 
 ### Translate
 Translate input text with automatic language detection
+
 Usage: `.trans <message>`
 
 ### Yeller
