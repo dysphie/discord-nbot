@@ -12,7 +12,7 @@ class Adblock(commands.Cog, name="Adblock"):
 
         if message.author.bot and message.author.name == 'PatchBot':
             for embed in message.embeds:
-                if "This update is sponsored by" not in embed.author.name:
+                if "This update is brought to you by" not in embed.author.name:
                     await message.channel.send(embed=embed)
             await message.delete()
 
