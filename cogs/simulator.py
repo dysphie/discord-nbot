@@ -6,24 +6,10 @@ from discord import TextChannel, User
 from discord.ext import commands
 from markovify import NewlineText
 from motor import motor_asyncio
-from nltk import pos_tag
 
 from cogs import utils
 
 MAX_NAME_LENGTH = 32
-
-
-class NltkText(NewlineText):
-    def word_split(self, sentence):
-        words = re.split(self.word_split_pattern, sentence)
-        words = [word for word in words if word]
-        words = ["::".join(tag) for tag in pos_tag(words)]
-        return words
-
-    def word_join(self, words):
-        sentence = " ".join(word.split("::")[0] for word in words)
-        return sentence
-
 
 class Parrot(commands.Cog, name="Parrot"):
 
@@ -55,7 +41,7 @@ class Parrot(commands.Cog, name="Parrot"):
     async def fetch_user_model(self, user_id: int):
         result = await self.models.find_one({'_id': user_id}, {'msg': 1})
         if result:
-            return NltkText.from_json(zlib.decompress(result['msg']))
+            return NewlineText.from_json(zlib.decompress(result['msg']))
 
     async def save_user_model(self, user_id: int, model):
         packed_model = zlib.compress(model.to_json().encode('utf-8'), level=9)
@@ -72,7 +58,7 @@ class Parrot(commands.Cog, name="Parrot"):
             f.write(doc['msg'])
             f.write('\n')
 
-        model = NltkText(f.getvalue(), well_formed=False)
+        model = NewlineText(f.getvalue(), well_formed=False)
         if model:
             await self.save_user_model(user_id, model)
             return model
