@@ -16,7 +16,7 @@ class Weather(commands.Cog):
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
-    @commands.command(aliases=['temp'])
+    @commands.command(aliases=['temp', 'w'])
     async def weather(self, ctx, *, args=None):
 
         latitude = None
