@@ -39,6 +39,10 @@ class Weather(commands.Cog):
                 await ctx.send('Unknown location')
                 return
 
+            latitude = location.latitude
+            longitude = location.longitude
+            address = location.address
+
         url = f'https://api.darksky.net/forecast/{self.api_key}/{latitude},{longitude}?units=ca'
         print(url)
         async with self.session.get(url) as resp:
