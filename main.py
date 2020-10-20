@@ -8,6 +8,9 @@ import sys
 import traceback
 from pathlib import Path
 
+intents = discord.Intents.default()
+intents.members = True
+
 
 class CustomContext(commands.Context):  # TODO
     pass
@@ -18,6 +21,7 @@ class DiscordBot(commands.Bot):
     def __init__(self):
         super().__init__(
             command_prefix='.',
+            intents=intents,
             allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=False)
         )
         self.db = motor.motor_asyncio.AsyncIOMotorClient(environ['NBOT_DB_URI'])['nbot']
