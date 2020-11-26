@@ -69,7 +69,7 @@ class Emotes(commands.Cog):
             await ctx.send('Discord rejected the emote (too big?)')
         else:
             try:
-                await self.bot.emotedb.insert_one({
+                await self.emotedb.insert_one({
                     'owner': ctx.author.id,
                     'name': name,
                     'url': str(emote.url),
@@ -84,7 +84,7 @@ class Emotes(commands.Cog):
 
     @commands.command()
     async def remove(self, ctx, name):
-        deleted = await self.bot.emotesdb.find_one_and_delete({'name': name, 'owner': ctx.author.id})
+        deleted = await self.emotedb.find_one_and_delete({'name': name, 'owner': ctx.author.id})
         if deleted:
             await ctx.send(f'Deleted `${name}`')
         else:
