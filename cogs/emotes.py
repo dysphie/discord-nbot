@@ -13,7 +13,7 @@ class Emotes(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.emotedb = bot.db.emotes
+        self.emotedb = bot.db['new_emotes']  # TODO: Fetch from config
         self.session = bot.session
         self.storage = None
 
@@ -31,13 +31,13 @@ class Emotes(commands.Cog):
         to_delete = []
 
         pipe = [
-            {'$match': {'_id': {'$in': prefixed}}},
-            {'$project': {'_id': 1, 'url': 1, 'length': {'$strLenCP': '$_id'}}},
+            {'$match': {'name': {'$in': prefixed}}},
+            {'$project': {'name': 1, 'url': 1, 'length': {'$strLenCP': '$name'}}},
             {'$sort': {'length': -1}}
         ]
 
         async for doc in self.emotedb.aggregate(pipeline=pipe):
-            name = doc['_id']
+            name = doc['name']
             emote = await self.create_emote_from_url(name, doc['url'])
             if emote:
                 to_delete.append(emote)
@@ -65,14 +65,15 @@ class Emotes(commands.Cog):
     async def add(self, ctx, name, url):
         try:
             emote = await self.create_emote_from_url(name, url)
-        except discord.HTTPException as e:
-            await ctx.send(e)
+        except Exception as e:
+            await ctx.send('Discord rejected the emote (too big?)')
         else:
             try:
                 await self.bot.db.emotes.insert_one({
                     'owner': ctx.author.id,
-                    '_id': name,
-                    'url': str(emote.url)
+                    'name': name,
+                    'url': str(emote.url),
+                    'source': 'user'
                 })
             except DuplicateKeyError:
                 await ctx.send(f'Emote with that name already exists')
@@ -83,8 +84,11 @@ class Emotes(commands.Cog):
 
     @commands.command()
     async def remove(self, ctx, name):
-        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
-        await ctx.send(doc)
+        deleted = await self.bot.db.emotes.find_one_and_delete({'name': name, 'owner': ctx.author.id})
+        if deleted:
+            await ctx.send(f'Deleted `${name}`')
+        else:
+            await ctx.send("Couldn't find emote. Either it doesn't exist or you are not the owner")
 
     async def impersonate(self, member: discord.Member, message: str, channel: discord.TextChannel):
         """Post a webhook that looks like a message sent by the user."""
