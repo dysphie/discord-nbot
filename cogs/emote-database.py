@@ -1,4 +1,6 @@
 from abc import abstractmethod, ABCMeta
+
+import pymongo
 from discord.ext import tasks, commands
 from pymongo.errors import BulkWriteError
 
@@ -25,39 +27,38 @@ class BTTVManager(EmoteAPIManager):
 
     async def backup_locally(self):
 
+        print('Backing up BTTV emotes')
+
         # TODO: Backup in case the import fails
         await self.storage.delete_many({'source': 'bttv'})
 
         emotes = []
 
         for i in range(0, 200):
-
             self.params['offset'] = i*100
             async with self.session.get(self.url, params=self.params) as r:
-                if r.status != 200:
-                    raise Exception('non-200 API response')
+                if r.status == 200:
+                    data = await r.json()
 
-            data = await r.json()
-
-            for e in data:
-                name = e['emote']['code']
-                file = e['emote']['id']
-
-                emotes.append({
-                    'name': name,
-                    'owner': 0,
-                    'url': f'https://cdn.betterttv.net/emote/{file}/2x',
-                    'source': 'bttv'
-                })
-
-            try:
-                result = self.storage.insert_many(emotes, ordered=False)
-                # TODO: 'ordered=False' might lead to the wrong emote being
-                #  added if a name exists twice in 'emotes'
-            except BulkWriteError:
-                pass
-            else:
-                print(len(result.inserted_ids))
+            # for e in data:
+            #     name = e['emote']['code']
+            #     file = e['emote']['id']
+            #
+            #     emotes.append({
+            #         'name': name,
+            #         'owner': 0,
+            #         'url': f'https://cdn.betterttv.net/emote/{file}/2x',
+            #         'source': 'bttv'
+            #     })
+            #
+            # try:
+            #     result = self.storage.insert_many(emotes, ordered=False)
+            #     # TODO: 'ordered=False' might lead to the wrong emote being
+            #     #  added if a name exists twice in 'emotes'
+            # except BulkWriteError:
+            #     pass
+            # else:
+            #     print(f'Inserted {len(result.inserted_ids)} from page {i}')
 
         print('Finished BTTV import')
 
@@ -69,7 +70,7 @@ class FFZManager(EmoteAPIManager):
         'high_dpi': 'off',
         'sort': 'count-desc',
         'per_page': 200,
-        'page': 0
+        'page': 1
     }
 
     def __init__(self, session, storage):
@@ -77,13 +78,18 @@ class FFZManager(EmoteAPIManager):
 
     async def backup_locally(self):
 
+        print('Backing up FFZ emotes')
+        # TODO: Backup in case the import fails
+        await self.storage.delete_many({'source': 'ffz'})
+
         pages_left = True
-        self.params['page'] = 0
+        self.params['page'] = 1
         while pages_left:
 
-            with self.session.get(self.url, params=self.params) as r:
+            async with self.session.get(self.url, params=self.params) as r:
                 if r.status != 200:
-                    raise Exception('non-200 API response')
+                    data = await r.json()
+                    raise Exception(f'non-200 API response {data}')
 
             data = await r.json()
 
@@ -95,16 +101,20 @@ class FFZManager(EmoteAPIManager):
                 emotes.append({
                     'name': name,
                     'owner': 0,
-                    'url': f'https:{url}'})
-                print(name)
+                    'url': f'https:{url}',
+                    'source': 'ffz'
+                })
 
             try:
                 result = await self.storage.insert_many(emotes, ordered=False)
+                # TODO: 'ordered=False' might lead to the wrong emote being
+                #  added if a name exists twice in 'emotes'
             except BulkWriteError:
                 pass
             else:
-                print(len(result.inserted_ids))
+                print(f'Inserted {len(result.inserted_ids)} from page {self.params["page"]}')
 
+            self.params['page'] += 1
             pages_left = data['_pages'] > self.params['page']
 
 
@@ -112,22 +122,28 @@ class EmoteManager(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.storage = bot.db.emotez
+        self.storage = bot.db['new_emotes']
         self.session = bot.session
-        self.rebuild_emotes.start()
 
         bttv = BTTVManager(self.session, self.storage)
         ffz = FFZManager(self.session, self.storage)
         self.apis = [bttv, ffz]
 
+        self.rebuild_emotes.start()
+
     def cog_unload(self):
         self.rebuild_emotes.cancel()
 
-    @tasks.loop(hours=24)
+    @tasks.loop(seconds=199999999999)
     async def rebuild_emotes(self):
         print("Rebuilding emote database")
-        for api in self.apis:
-            await api.backup_locally()
+
+        await self.storage.create_index(
+            [("name", pymongo.TEXT), ("source", pymongo.TEXT)], unique=True)
+
+        await self.apis[1].backup_locally()
+        # for api in self.apis:
+        #    await api.backup_locally()
 
     @rebuild_emotes.before_loop
     async def before_cleaner(self):
