@@ -16,6 +16,14 @@ class Weather(commands.Cog):
         except KeyError as e:
             raise Exception(f'Environment variable {e.args[0]} not set')
 
+    @staticmethod
+    def celsius_to_fahrenheit(celsius: float) -> float:
+        return (celsius * 9 / 5) + 32
+
+    @staticmethod
+    def kmh_to_mph(kmh: float) -> float:
+        return kmh * 0.621371
+
     @commands.command(aliases=['temp', 'w'])
     async def weather(self, ctx, *, args=None):
 
@@ -50,16 +58,27 @@ class Weather(commands.Cog):
 
         summary = data['currently']['summary']
         temp = data['currently']['temperature']
-        humidity = data['currently']['humidity']
-        wind_speed = data['currently']['windSpeed']
-        pred = data['hourly']['summary']
+        temp_f = self.celsius_to_fahrenheit(temp)
+        apparent_temp = data['currently']['apparentTemperature']
+        apparent_temp_f = self.celsius_to_fahrenheit(apparent_temp)
+        humidity_pct = data['currently']['humidity'] * 100
+        wind_speed_kmh = data['currently']['windSpeed']
+        wind_speed_mph = self.kmh_to_mph(wind_speed_kmh)
+        hourly_prediction = data['hourly']['summary']
 
         # Announce to channel
-        embed = discord.Embed(description=f'{summary} ･ _{pred}_', color=0x7fffd4)
-        embed.add_field(name='**:thermometer:️ Temp**', value=f'{int(temp)}°C ･ {int(temp * 1.8 + 32)}°F', inline=True)
-        embed.add_field(name='💧 **Humidity**', value=f'{int(humidity * 100)}%', inline=True)
-        embed.add_field(name="🍃 **Wind**", value=f'{wind_speed} km/h ･ {int(wind_speed * 0.621371)} mph', inline=True)
+        embed = discord.Embed(description=f'{summary} ･ _{hourly_prediction}_', color=0x7fffd4)
+        embed.add_field(
+            inline=True, name='🌡️ **Temp**',
+            value=f'{temp}°C _(feels like {apparent_temp}°C)_\n{temp_f}°F _(feels like {apparent_temp_f}°F)_')
+
+        embed.add_field(inline=True, name='💧 **Humidity**', value=f'{humidity_pct}%')
+        embed.add_field(inline=True, name="🍃 **Wind**", value=f'{wind_speed_kmh} km/h\n{wind_speed_mph} mph')
         embed.set_footer(text=address)
+
+        for alert in data['alerts']:
+            embed.add_field(inline=True, name=alert['title'], value=alert['description'])
+
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['setloc'])
