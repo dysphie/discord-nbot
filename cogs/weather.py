@@ -57,13 +57,13 @@ class Weather(commands.Cog):
             data = await resp.json()
 
         summary = data['currently']['summary']
-        temp = data['currently']['temperature']
-        temp_f = self.celsius_to_fahrenheit(temp)
-        apparent_temp = data['currently']['apparentTemperature']
-        apparent_temp_f = self.celsius_to_fahrenheit(apparent_temp)
-        humidity_pct = data['currently']['humidity'] * 100
-        wind_speed_kmh = data['currently']['windSpeed']
-        wind_speed_mph = self.kmh_to_mph(wind_speed_kmh)
+        temp = round(data['currently']['temperature'])
+        temp_f = round(self.celsius_to_fahrenheit(temp))
+        apparent_temp = round(data['currently']['apparentTemperature'])
+        apparent_temp_f = round(self.celsius_to_fahrenheit(apparent_temp))
+        humidity_pct = round(data['currently']['humidity'] * 100)
+        wind_speed_kmh = round(data['currently']['windSpeed'], 2)
+        wind_speed_mph = round(self.kmh_to_mph(wind_speed_kmh), 2)
         hourly_prediction = data['hourly']['summary']
 
         # Announce to channel
