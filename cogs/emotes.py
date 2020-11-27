@@ -1,4 +1,6 @@
+import logging
 import re
+from time import time
 
 import discord
 from discord import HTTPException
@@ -13,63 +15,90 @@ class Emotes(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.emotedb = bot.db['new_emotes']  # TODO: Fetch from config
+        self.db_emotes = bot.db['new_emotes']  # TODO: Fetch from config
         self.session = bot.session
-        self.storage = None
+        self.emotes_guild = None
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.storage = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
+        self.emotes_guild = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
 
     @commands.Cog.listener()
     async def on_message(self, message):
 
-        if message.author.bot:
+        if message.author.bot or not self.emotes_guild:
             return
 
-        prefixed = EMOTE_PATTERN.findall(message.content)
-        to_delete = []
+        emotes_used = []
 
-        pipe = [
-            {'$match': {'name': {'$in': prefixed}}},
-            {'$project': {'name': 1, 'url': 1, 'length': {'$strLenCP': '$name'}}},
-            {'$sort': {'length': -1}}
-        ]
+        #  Find all potential emotes (e.g. $duck)
+        prefixed_words = list(set(EMOTE_PATTERN.findall(message.content)))
+        if not prefixed_words:
+            return
 
-        async for doc in self.emotedb.aggregate(pipeline=pipe):
-            name = doc['name']
-            emote = await self.create_emote_from_url(name, doc['url'])
-            if emote:
-                to_delete.append(emote)
-                message.content = message.content.replace(f"${name}", str(emote))
+        # Avoid replacing $duck for <:duck:123> before replacing $ducks
+        prefixed_words.sort(key=len)
 
-        if to_delete:
-            to_delete.append(message)
+        for i, word in enumerate(prefixed_words):
+            # Search 'word' in local guild emotes
+            emote = discord.utils.find(lambda m: m.name == word, message.channel.guild.emojis)
+            if not emote:
+                # Search in cache guild emotes
+                emote = discord.utils.find(lambda m: m.name == word, self.emotes_guild.emojis)
+                if not emote:
+                    # Give up for now
+                    continue
 
-            sent = await self.impersonate(message.author, message.content, message.channel)
-            if sent:
-                for trash in to_delete:
-                    await trash.delete()
+            message.content = message.content.replace(f'${word}', str(emote))
+            emotes_used.append(word)
+            del prefixed_words[i]
 
-    async def create_emote_from_url(self, name: str, url: str):
-        async with self.session.get(url) as response:
-            image_bytes = await response.read()
+        delete_queue = [message]
+
+        if not prefixed_words:
+            return
+
+            #  Search remaining emotes in database
+        async for emote in self.db_emotes.find({'name': {'$in': prefixed_words}}):
+            name = emote['name']
             try:
-                emote = await self.storage.create_custom_emoji(name=name, image=image_bytes)
-            except HTTPException as e:
-                pass
+                emote = await self.upload_discord_emote(name, emote['url'])
+            except discord.HTTPException as e:
+                logging.warning(f'Error creating emoji "{name}". {e.text}')
             else:
-                return emote
+                message.content = message.content.replace(f'${name}', str(emote))
+                emotes_used.append(name)
+                delete_queue.append(emote)
+
+        try:
+            sent = await self.impersonate(message.author, message.content, message.channel)
+        except HTTPException as e:
+            logging.warning(f'Failed to send emoted message. {e.text}')
+        else:
+            if sent:
+                for item in delete_queue:
+                    await item.delete()
+
+        print(f'TODO: Save {emotes_used}')
+
+    async def upload_discord_emote(self, name: str, url: str):
+        async with self.session.get(url) as response:
+            if response.status != 200:
+                raise discord.HTTPException(response.status, "Invalid URL")
+
+            image_bytes = await response.read()
+            emote = await self.emotes_guild.create_custom_emoji(name=name, image=image_bytes)
+            return emote
 
     @commands.command()
     async def add(self, ctx, name, url):
         try:
-            emote = await self.create_emote_from_url(name, url)
-        except Exception as e:
+            emote = await self.upload_discord_emote(name, url)
+        except discord.HTTPException as e:
             await ctx.send('Discord rejected the emote (too big?)')
         else:
             try:
-                await self.emotedb.insert_one({
+                await self.db_emotes.insert_one({
                     'owner': ctx.author.id,
                     'name': name,
                     'url': str(emote.url),
@@ -84,7 +113,7 @@ class Emotes(commands.Cog):
 
     @commands.command()
     async def remove(self, ctx, name):
-        deleted = await self.emotedb.find_one_and_delete({'name': name, 'owner': ctx.author.id})
+        deleted = await self.db_emotes.find_one_and_delete({'name': name, 'owner': ctx.author.id})
         if deleted:
             await ctx.send(f'Deleted `${name}`')
         else:
@@ -112,8 +141,3 @@ class Emotes(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Emotes(bot))
-
-
-
-
-
