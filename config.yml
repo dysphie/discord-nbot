@@ -3,7 +3,7 @@ weather-cleverbot-chance: 0.25
 game_updates_channel: 540868910166048779
 bot-prefix: '.'
 starboard_channel: 617539911528218634
-emote_storage_guild: 719448049981849620
+emote_storage_guild: 336213135193145344
 monitored_channels: [
   336213135193145344, # general @ ncrew
   540868910166048779, # games @ ncrew
