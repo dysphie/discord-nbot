@@ -13,33 +13,32 @@ class Yeller(commands.Cog, name="Yeller"):
             return doc['m']
 
     async def save_yell(self, message: str):
-        document = {'m': message}
-        await self.yells.insert_one(document)
+        await self.yells.insert_one({'m': message})
 
     @staticmethod
-    def is_message_yell(message: str):
+    def is_message_yell(message: str) -> bool:
         alph = list(filter(str.isalpha, message))
-        percentage = sum(map(str.isupper, alph)) / len(alph)
-        return percentage > 0.85 and len(message.split()) > 2
+        if alph:
+            percentage = sum(map(str.isupper, alph)) / len(alph)
+            return percentage > 0.85 and len(message.split()) > 2
+        return False
 
     @commands.Cog.listener()
     @commands.guild_only()
     @commands.bot_has_permissions(send_messages=True)
     async def on_message(self, message):
 
-        if message.author.bot:
+        if message.author.bot or not message.clean_content:
             return
 
-        text = message.clean_content
-        if not text:
-            return
+        if self.is_message_yell(message.clean_content):
+            response = await self.get_yell()
+            if not response:
+                return
 
-        if self.is_message_yell(text):
             async with message.channel.typing():
-                response = await self.get_yell()
-                if response:
-                    await message.channel.send(response)
-                await self.save_yell(text)
+                await message.channel.send(response)
+                await self.save_yell(response)
 
 
 def setup(bot):
