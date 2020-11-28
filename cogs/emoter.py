@@ -315,7 +315,7 @@ class Emoter(commands.Cog):
             async for emote in self.emotes.find({'name': {'$in': prefixed_words}}):
                 name = emote['name']
                 try:
-                    emote = await self.upload_emote_from_url(message.channel.guild, name, emote['url'])
+                    emote = await self.upload_emote_from_url(self.emote_guild, name, emote['url'])
                 except discord.HTTPException as e:
                     logging.warning(f'Error creating emoji "{name}". {e.text}')
                 else:
