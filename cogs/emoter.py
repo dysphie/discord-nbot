@@ -31,7 +31,10 @@ class BTTVManager(EmoteAPIManager):
         super().__init__(session, storage)
 
     id = "bttv"
-    url = 'https://api.betterttv.net/3/emotes/shared/top'
+    urls = {
+        'trending': 'https://api.betterttv.net/3/emotes/trending/top',
+        'shared': 'https://api.betterttv.net/3/emotes/shared/top'
+    }
     params = {'offset': 0, 'limit': 100}
 
     async def backup_locally(self):
@@ -47,42 +50,43 @@ class BTTVManager(EmoteAPIManager):
         else:
             print(f'[{self.id}] Deleted {deleted.deleted_count} existing emotes')
 
-        for i in range(0, 200):
+        for section, url in self.urls.items():
+            for i in range(0, 200):
 
-            emotes = []
+                emotes = []
 
-            self.params['offset'] = i * 100
-            async with self.session.get(self.url, params=self.params) as r:
-                if r.status != 200:
-                    raise Exception(f'[{self.id}] API responded with status {r.status}')
+                self.params['offset'] = i * 100
+                async with self.session.get(url, params=self.params) as r:
+                    if r.status != 200:
+                        raise Exception(f'[{self.id}] API responded with status {r.status}')
 
-                data = await r.json()
+                    data = await r.json()
 
-                for e in data:
-                    name = e['emote']['code']
-                    file = e['emote']['id']
+                    for e in data:
+                        name = e['emote']['code']
+                        file = e['emote']['id']
 
-                    emote = {
-                        'name': name,
-                        'owner': 0,
-                        'url': f'https://cdn.betterttv.net/emote/{file}/2x',
-                        'source': 'bttv'
-                    }
+                        emote = {
+                            'name': name,
+                            'owner': 0,
+                            'url': f'https://cdn.betterttv.net/emote/{file}/2x',
+                            'source': 'bttv'
+                        }
 
-                    emotes.append(emote)
+                        emotes.append(emote)
 
-                num_inserted = 0
-                try:
-                    # TODO: 'ordered=False' might lead to the wrong emote being
-                    #  added if a name exists twice in 'emotes', but setting it
-                    #  to false halts the entire bulk write
-                    result = await self.storage.insert_many(emotes, ordered=False)
-                except BulkWriteError as bwe:
-                    num_inserted = bwe.details['nInserted']
-                else:
-                    num_inserted = len(result.inserted_ids)
-                finally:
-                    print(f'[{self.id}] Page {i}: Inserted {num_inserted} emotes')
+                    num_inserted = 0
+                    try:
+                        # TODO: 'ordered=False' might lead to the wrong emote being
+                        #  added if a name exists twice in 'emotes', but setting it
+                        #  to false halts the entire bulk write
+                        result = await self.storage.insert_many(emotes, ordered=False)
+                    except BulkWriteError as bwe:
+                        num_inserted = bwe.details['nInserted']
+                    else:
+                        num_inserted = len(result.inserted_ids)
+                    finally:
+                        print(f'[{self.id}] [{section}] Page {i}: Inserted {num_inserted} emotes')
 
         print(f'[{self.id}] Finished import')
 
