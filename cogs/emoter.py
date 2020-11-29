@@ -318,7 +318,6 @@ class Emoter(commands.Cog):
         embed.add_field(inline=False, name='Cache capacity', value=f'{cached_current}/{cached_max}')
         embed.add_field(inline=False, name='Emotes in database', value=emote_db_count)
         embed.add_field(inline=False, name='Last updated emote database', value=emotes_last_updated)
-        embed.add_field(inline=False, name='Last updated emote database', value=emotes_last_updated)
         embed.add_field(inline=False, name='Last updated emote cache', value=cache_last_updated)
         await ctx.send(embed=embed)
 
