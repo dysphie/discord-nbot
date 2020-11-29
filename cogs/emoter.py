@@ -185,7 +185,7 @@ class EmoteCacheUpdater:
     async def update(self):
 
         pipeline = [
-            {"$match": {'uses': {'$gt': 1}}},
+            {"$match": {'uses': {'$gt': 0}}},
             {"$sort": {"uses": -1}},
             {"$project": {"name": 1}},
             {"$limit": 40},
