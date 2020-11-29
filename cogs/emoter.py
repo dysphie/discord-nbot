@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 from abc import abstractmethod
@@ -6,7 +5,7 @@ from datetime import datetime
 import discord
 import pymongo
 from discord.ext import commands, tasks
-from pymongo.errors import BulkWriteError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 from abc import ABCMeta
 
 EMOTE_PATTERN = re.compile(r'\$([^\s$]+)')
@@ -267,6 +266,36 @@ class Emoter(commands.Cog):
     async def before_cleaner(self):
         await self.bot.wait_until_ready()
 
+    @commands.group()
+    async def emoter(self, ctx):
+        pass
+
+    @emoter.command()
+    async def add(self, ctx, name: str, url: str):
+        try:
+            emote = await self.upload_emote_from_url(self.emote_guild, name, url)
+        except discord.HTTPException as e:
+            await ctx.send(e)
+        else:
+            try:
+                await self.bot.db.emotes.insert_one({
+                    'owner': ctx.author.id,
+                    '_id': name,
+                    'url': str(emote.url),
+                    'uses': 1
+                })
+            except DuplicateKeyError:
+                await ctx.send(f'Emote with that name already exists')
+            else:
+                await ctx.send(f'Added emote `${name}`')
+            finally:
+                await emote.delete()
+
+    @emoter.command()
+    async def remove(self, ctx, name):
+        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
+        await ctx.send(f'Deleted emote `${name}`' if doc else 'Emote not found or you are not the owner')
+
     @commands.Cog.listener()
     async def on_ready(self):
         self.emote_guild = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
@@ -282,6 +311,7 @@ class Emoter(commands.Cog):
             return emote
 
     @commands.Cog.listener()
+    @commands.guild_only()
     async def on_message(self, message):
 
         if message.author.bot:
