@@ -168,13 +168,15 @@ class EmoteCacheUpdater:
         self.stats = stats  # Needed to fetch the most used emotes
         self.guild = guild  # Guild we are using as the emote cache
 
-    async def check_for_updates(self):
-
+    async def get_last_update_time(self):
         result = await self.logs.find_one({'_id': 'lastCacheUpdate'})
-        if result and (datetime.now() - result['date']).days < 2:
+        return result['date'] if result else datetime.min
+
+    async def check_for_updates(self):
+        last_update_time = await self.get_last_update_time()
+        if (datetime.now() - last_update_time).days < 2:
             print('EmoteCacheUpdater: No update needed')
             return
-
         await self.update()
 
     async def update(self):
@@ -203,7 +205,6 @@ class EmoteCacheUpdater:
         async for doc in self.data.find({'name': {'$in': most_used}}):  # TODO: Limit results
             async with self.session.get(doc['url']) as response:
                 if response.status == 200:
-
                     print(f'Caching most used emotes: {doc}')
                     image = await response.read()
                     await self.guild.create_custom_emoji(name=doc['name'], image=image)
@@ -222,9 +223,13 @@ class EmoteCollectionUpdater:
         ffz = FFZManager(self.session, self.emotes)
         self.workers = [bttv, ffz]
 
-    async def check_for_updates(self):
+    async def get_last_update_time(self):
         result = await self.logs.find_one({'_id': 'lastEmoteCollectionUpdate'})
-        if result and (datetime.now() - result['date']).days < 7:
+        return result['date'] if result else datetime.min
+
+    async def check_for_updates(self):
+        last_update_time = await self.get_last_update_time()
+        if (datetime.now() - last_update_time).days < 7:
             print('EmoteCollectionUpdater: No update needed')
             return
 
@@ -236,7 +241,8 @@ class EmoteCollectionUpdater:
             await worker.backup_locally()
         # TODO: Confirm it was successful
 
-        await self.logs.update_one({'_id': 'lastEmoteCollectionUpdate'}, {'$set': {'date': datetime.now()}}, upsert=True)
+        await self.logs.update_one({'_id': 'lastEmoteCollectionUpdate'}, {'$set': {'date': datetime.now()}},
+                                   upsert=True)
 
 
 class Emoter(commands.Cog):
@@ -295,6 +301,26 @@ class Emoter(commands.Cog):
     async def remove(self, ctx, name):
         doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
         await ctx.send(f'Deleted emote `${name}`' if doc else 'Emote not found or you are not the owner')
+
+    @emoter.command()
+    async def info(self, ctx):
+        # FIXME: This will probably hit the character limit
+
+        cache_last_updated = await self.cache_updater.get_last_update_time()  # TODO: could be null
+        emotes_last_updated = await self.emotes_updater.get_last_update_time()
+        emote_db_count = await self.emotes.estimated_document_count()
+        cached_emotes = self.emote_guild.emojis
+        cached_preview = " ".join([f'{str(e)}' for e in cached_emotes])
+        cached_current = len(cached_emotes)
+        cached_max = self.emote_guild.emoji_limit - 10  # TODO: Softcode
+        embed = discord.Embed(description='_ _', color=0x99EE44)
+        embed.add_field(inline=False, name='Emotes in cache', value=cached_preview)
+        embed.add_field(inline=False, name='Cache capacity', value=f'{cached_current}/{cached_max}')
+        embed.add_field(inline=False, name='Emotes in database', value=emote_db_count)
+        embed.add_field(inline=False, name='Last updated emote database', value=emotes_last_updated)
+        embed.add_field(inline=False, name='Last updated emote database', value=emotes_last_updated)
+        embed.add_field(inline=False, name='Last updated emote cache', value=cache_last_updated)
+        await ctx.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -390,6 +416,7 @@ class Emoter(commands.Cog):
                 content=message,
                 avatar_url=member.avatar_url,
                 wait=True)
+
 
 def setup(bot):
     bot.add_cog(Emoter(bot))
