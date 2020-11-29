@@ -287,7 +287,7 @@ class Emoter(commands.Cog):
             await ctx.send(e)
         else:
             try:
-                await self.bot.db.emotes.insert_one({
+                await self.emotes.insert_one({
                     'owner': ctx.author.id,
                     '_id': name,
                     'url': str(emote.url),
@@ -302,7 +302,7 @@ class Emoter(commands.Cog):
 
     @emoter.command()
     async def remove(self, ctx, name):
-        doc = await self.bot.db.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
+        doc = await self.emotes.find_one_and_delete({'_id': name, 'owner': ctx.author.id})
         await ctx.send(f'Deleted emote `${name}`' if doc else 'Emote not found or you are not the owner')
 
     @emoter.command()
