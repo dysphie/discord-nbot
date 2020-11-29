@@ -74,6 +74,9 @@ class BTTVManager(EmoteAPIManager):
 
                         emotes.append(emote)
 
+                    if not emotes:
+                        break
+
                     num_inserted = 0
                     try:
                         # TODO: 'ordered=False' might lead to the wrong emote being
