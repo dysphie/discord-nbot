@@ -186,7 +186,7 @@ class EmoteCacheUpdater:
 
         pipeline = [
             {"$match": {'uses': {'$gt': 1}}},
-            {"$sort": {"uses": 1}},
+            {"$sort": {"uses": -1}},
             {"$project": {"name": 1}},
             {"$limit": 40},
         ]
