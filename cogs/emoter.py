@@ -31,7 +31,7 @@ class BTTVManager(EmoteAPIManager):
 
     id = "bttv"
     urls = {
-        'trending': 'https://api.betterttv.net/3/emotes/trending/top',
+        'trending': 'https://api.betterttv.net/3/emotes/shared/trending',
         'shared': 'https://api.betterttv.net/3/emotes/shared/top'
     }
     params = {'offset': 0, 'limit': 100}
