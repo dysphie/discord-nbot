@@ -1,7 +1,10 @@
 import logging
 import re
 from abc import abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
+from typing import List, Dict
+
 import discord
 import pymongo
 from discord.ext import commands, tasks
@@ -12,22 +15,101 @@ EMOTE_PATTERN = re.compile(r'\$([^\s$]+)')
 INVISIBLE_CHAR = '\u17B5'
 
 
-class EmoteAPIManager(metaclass=ABCMeta):
+@dataclass
+class DatabaseEmote:
+    name: str
+    url: str
+    owner: int
 
-    @abstractmethod
-    def __init__(self, session, storage):
+
+class DatabaseEmoteBatch:
+
+    def __init__(self, emotes: List[DatabaseEmote], source: str):
+        self.emotes = emotes
+        self.source = source
+
+    def to_list(self) -> List[Dict]:
+        return_list = []
+        for e in self.emotes:
+            return_list.append({'name': e.name, 'url': e.url, 'owner': e.owner})
+        return return_list
+
+    @property
+    def length(self):
+        return len(self.emotes)
+
+
+class EmoteCollectionUpdater:
+
+    def __init__(self, logs, emotes, session):
         self.session = session
-        self.storage = storage
+        self.logs = logs
+        self.emotes = emotes
+
+        bttv = BttvApiFetcher(self)
+        ffz = FfzApiFetcher(self)
+        self.workers = [bttv, ffz]
+
+    async def get_last_update_time(self):
+        result = await self.logs.find_one({'_id': 'lastEmoteCollectionUpdate'})
+        return result['date'] if result else datetime.min
+
+    async def check_for_updates(self):
+        last_update_time = await self.get_last_update_time()
+        if (datetime.now() - last_update_time).days < 7:
+            print('EmoteCollectionUpdater: No update needed')
+            return
+
+        await self.update()
+
+    async def update(self):
+        await self.emotes.create_index([("name", pymongo.DESCENDING)], unique=True)
+
+        for worker in self.workers:
+            await worker.pull_emotes()
+        # TODO: Confirm it was successful
+
+        await self.logs.update_one({'_id': 'lastEmoteCollectionUpdate'}, {'$set': {'date': datetime.now()}},
+                                   upsert=True)
+
+    async def insert_emotes(self, emotes: DatabaseEmoteBatch):
+
+        print(f'Inserting {emotes.length} emotes from {emotes.source}')
+
+        num_inserted = 0
+        try:
+            result = await self.emotes.insert_many(emotes.to_list(), ordered=False)
+        except BulkWriteError as bwe:
+            num_inserted = bwe.details['nInserted']
+        else:
+            num_inserted = len(result.inserted_ids)
+        finally:
+            print(f'Inserted {num_inserted} emotes')
+
+    async def purge_by_source(self, source_id: str):
+        try:
+            deleted = await self.emotes.delete_many({'source': 'bttv'})
+        except Exception as e:
+            print(e)
+        else:
+            print(f'[{source_id}] Deleted {deleted.deleted_count} existing emotes')
+
+
+class EmoteApiFetcher(metaclass=ABCMeta):
 
     @abstractmethod
-    async def backup_locally(self):
+    def __init__(self, emote_mgr: EmoteCollectionUpdater):
+        self.mgr = emote_mgr
+
+    @abstractmethod
+    async def pull_emotes(self):
         pass
 
 
-class BTTVManager(EmoteAPIManager):
+class BttvApiFetcher(EmoteApiFetcher):
 
-    def __init__(self, session, storage):
-        super().__init__(session, storage)
+    def __init__(self, emote_mgr):
+        super(BttvApiFetcher, self).__init__(emote_mgr)
 
     id = "bttv"
     urls = {
@@ -36,26 +118,17 @@ class BTTVManager(EmoteAPIManager):
     }
     params = {'offset': 0, 'limit': 100}
 
-    async def backup_locally(self):
+    async def pull_emotes(self):
 
         print(f'[{self.id}] Backing up emotes')
-
-        # TODO: Backup in case the import fails
-
-        try:
-            deleted = await self.storage.delete_many({'source': 'bttv'})
-        except Exception as e:
-            print(e)
-        else:
-            print(f'[{self.id}] Deleted {deleted.deleted_count} existing emotes')
 
         for section, url in self.urls.items():
             for i in range(0, 200):
 
-                emotes = []
+                emotes: List[DatabaseEmote] = []
 
                 self.params['offset'] = i * 100
-                async with self.session.get(url, params=self.params) as r:
+                async with self.mgr.session.get(url, params=self.params) as r:
                     if r.status != 200:
                         raise Exception(f'[{self.id}] API responded with status {r.status}')
 
@@ -63,37 +136,20 @@ class BTTVManager(EmoteAPIManager):
 
                     for e in data:
                         name = e['emote']['code']
-                        file = e['emote']['id']
+                        url = f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x'
 
-                        emote = {
-                            'name': name,
-                            'owner': 0,
-                            'url': f'https://cdn.betterttv.net/emote/{file}/2x',
-                            'source': 'bttv'
-                        }
-
+                        emote = DatabaseEmote(name=name, url=url, owner=0)
                         emotes.append(emote)
 
                     if not emotes:
                         break
 
-                    num_inserted = 0
-                    try:
-                        # TODO: 'ordered=False' might lead to the wrong emote being
-                        #  added if a name exists twice in 'emotes', but setting it
-                        #  to false halts the entire bulk write
-                        result = await self.storage.insert_many(emotes, ordered=False)
-                    except BulkWriteError as bwe:
-                        num_inserted = bwe.details['nInserted']
-                    else:
-                        num_inserted = len(result.inserted_ids)
-                    finally:
-                        print(f'[{self.id}] [{section}] Page {i}: Inserted {num_inserted} emotes')
+                    await self.mgr.insert_emotes(DatabaseEmoteBatch(emotes, self.id))
 
         print(f'[{self.id}] Finished import')
 
 
-class FFZManager(EmoteAPIManager):
+class FfzApiFetcher(EmoteApiFetcher):
     id = 'ffz'
     url = 'https://api.frankerfacez.com/v1/emoticons'
     params = {
@@ -103,17 +159,10 @@ class FFZManager(EmoteAPIManager):
         'page': 1
     }
 
-    def __init__(self, session, storage):
-        super().__init__(session, storage)
+    def __init__(self, emote_mgr: EmoteCollectionUpdater):
+        super().__init__(emote_mgr)
 
-    async def backup_locally(self):
-
-        try:
-            deleted = await self.storage.delete_many({'source': 'ffz'})
-        except Exception as e:
-            print(e)
-        else:
-            print(f'[{self.id}] Deleted {deleted.deleted_count} existing emotes')
+    async def pull_emotes(self):
 
         print(f'[{self.id}] Backing up emotes')
         await self.backup_from_page(1)
@@ -123,38 +172,21 @@ class FFZManager(EmoteAPIManager):
 
         self.params['page'] = page_num  # Update request headers
 
-        async with self.session.get(self.url, params=self.params) as r:
+        async with self.mgr.session.get(self.url, params=self.params) as r:
             if r.status != 200:
                 raise Exception(f'[{self.id}] API responded with status {r.status}')
 
             data = await r.json()
 
-            emotes = []
+            emotes: List[DatabaseEmote] = list()
+
             for e in data['emoticons']:
                 name = e['name']
                 url = e['urls'].get('2') or e['urls'].get('1')
-
-                emote = {
-                    'name': name,
-                    'owner': 0,
-                    'url': f'https:{url}',
-                    'source': 'ffz'
-                }
-
+                emote = DatabaseEmote(name=name, url=url, owner=0)
                 emotes.append(emote)
 
-            num_inserted = 0
-            try:
-                # TODO: 'ordered=False' might lead to the wrong emote being
-                #  added if a name exists twice in 'emotes', but setting it
-                #  to false halts the entire bulk write
-                result = await self.storage.insert_many(emotes, ordered=False)
-            except BulkWriteError as bwe:
-                num_inserted = bwe.details['nInserted']
-            else:
-                num_inserted = len(result.inserted_ids)
-            finally:
-                print(f'[{self.id}] Page {self.params["page"]}: Inserted {num_inserted} emotes')
+            await self.mgr.insert_emotes(DatabaseEmoteBatch(emotes, self.id))
 
             # Recursively fetch subsequent pages
             # if data['_pages'] > page_num:
@@ -182,70 +214,68 @@ class EmoteCacheUpdater:
             return
         await self.update()
 
-    async def update(self):
+    async def get_most_used_emotes(self, limit: int) -> dict:
 
-        pipeline = [
-            {"$match": {'uses': {'$gt': 0}}},
-            {"$sort": {"uses": -1}},
-            {"$project": {"name": 1}},
-            {"$limit": 40},
+        query = [
+            {'$match': {'uses': {'$gt': 0}}},  # Get emotes that have been used at least once
+            {'$sort': {'uses': -1}},  # Sort by most uses
+            {'$limit': limit},
+            {
+                # Get array of objects whose `name` matches an `_id` returned by the stats db
+                '$lookup': {
+                    'from': 'emoter.emotes',
+                    'let': {'name': '$_id'},
+                    'pipeline': [
+                        {'$match': {'$expr': {'$eq': ['$name', '$$name']}}},
+                        {'$limit': 1},  # For sanity's sake, there should never be multiple results
+                        {'$project': {'url': 1}}
+                    ],
+                    'as': 'emote_data'
+                }
+            },
+            # Array can only have one object, so extract url from the object and make it a simple top field
+            {'$project': {'url': {'$arrayElemAt': ['emote_data.url', 0]}}}
         ]
 
-        # TODO: Combine both queries into one with aggregate?
-        most_used = []
-        async for doc in self.stats.aggregate(pipeline):
-            most_used.append(doc['_id'])
+        results = {}
+        async for doc in self.stats.aggregate(query):
+            results[doc['_id']] = doc['url']
 
+        return results
+
+    async def update(self):
+
+        most_used: dict = await self.get_most_used_emotes(40)
         if not most_used:
             logging.warning('Database returned no data for most used emotes')
             return
-        else:
-            print(most_used)
 
         for emote in self.guild.emojis:
             await emote.delete()
 
-        async for doc in self.data.find({'name': {'$in': most_used}}):  # TODO: Limit results
-            async with self.session.get(doc['url']) as response:
+        num_uploaded = 0
+        for name, url in most_used.items():
+            async with self.session.get(url) as response:
                 if response.status == 200:
-                    print(f'Caching most used emotes: {doc}')
                     image = await response.read()
-                    await self.guild.create_custom_emoji(name=doc['name'], image=image)
+                    try:
+                        await self.guild.create_custom_emoji(name=name, image=image)
+                    except discord.HTTPException:
+                        pass
+                    finally:
+                        num_uploaded += 1
 
+        num_failed = len(most_used) - num_uploaded
+        print(f'EmoteCacheUpdater: Caching complete. Uploaded: {num_uploaded}. Failed: {num_failed}')
         await self.logs.update_one({'_id': 'lastCacheUpdate'}, {'$set': {'date': datetime.now()}}, upsert=True)
 
 
-class EmoteCollectionUpdater:
+class EmoteDatabaseUpdateResults:
 
-    def __init__(self, logs, emotes, session):
-        self.session = session
-        self.logs = logs
-        self.emotes = emotes
-
-        bttv = BTTVManager(self.session, self.emotes)
-        ffz = FFZManager(self.session, self.emotes)
-        self.workers = [bttv, ffz]
-
-    async def get_last_update_time(self):
-        result = await self.logs.find_one({'_id': 'lastEmoteCollectionUpdate'})
-        return result['date'] if result else datetime.min
-
-    async def check_for_updates(self):
-        last_update_time = await self.get_last_update_time()
-        if (datetime.now() - last_update_time).days < 7:
-            print('EmoteCollectionUpdater: No update needed')
-            return
-
-        await self.update()
-
-    async def update(self):
-        await self.emotes.create_index([("name", pymongo.DESCENDING)], unique=True)
-        for worker in self.workers:
-            await worker.backup_locally()
-        # TODO: Confirm it was successful
-
-        await self.logs.update_one({'_id': 'lastEmoteCollectionUpdate'}, {'$set': {'date': datetime.now()}},
-                                   upsert=True)
+    def __init__(self, successful: bool, error: str, num_inserted: int):
+        self.successful = successful
+        self.error = error
+        self.num_inserted: num_inserted
 
 
 class Emoter(commands.Cog):
@@ -254,6 +284,7 @@ class Emoter(commands.Cog):
         self.logs = bot.db['emoter.logs']
         self.emotes = bot.db['emoter.emotes']
         self.stats = bot.db['emoter.stats']
+        self.clientprefs = bot.db['emoter.clientprefs']
         self.session = bot.session
         self.emote_guild = None
 
@@ -299,6 +330,71 @@ class Emoter(commands.Cog):
                 await ctx.send(f'Added emote `${name}`')
             finally:
                 await emote.delete()
+
+    @commands.max_concurrency(1)
+    @commands.is_owner()
+    @emoter.group()
+    async def update(self, ctx):
+        pass
+
+    @update.command()
+    async def cache(self, ctx):
+        await ctx.info('Forcing emote cache update ...')
+
+    @update.command()
+    async def db(self, ctx):
+        await ctx.info('Forcing emote database update ...')
+
+    @commands.is_owner()
+    @emoter.command()
+    async def disable(self, ctx, emote_name: str):
+        try:
+            result = await self.emotes.update_one(
+                {'name': emote_name},
+                {'$set': {'enabled': False}}
+            )
+        except Exception as e:
+            await ctx.error(f'Operation failed: {e}')
+        else:
+            emote_name = discord.utils.escape_markdown(emote_name)
+
+            if result.modifiedCount:
+                await ctx.success(f'Emote `{emote_name}` **disabled**')
+            else:
+                await ctx.warning(f'Emote `{emote_name}` was not found')
+
+    @commands.is_owner()
+    @emoter.command()
+    async def enable(self, ctx, emote_name: str):
+        try:
+            result = await self.emotes.update_one(
+                {'name': emote_name},
+                {'$set': {'enabled': True}}
+            )
+        except Exception as e:
+            await ctx.error(f'Operation failed: {e}')
+        else:
+            emote_name = discord.utils.escape_markdown(emote_name)
+
+            if result.modifiedCount:
+                await ctx.success(f'Emote `{emote_name}` **disabled**')
+            else:
+                await ctx.warning(f'Emote `{emote_name}` was not found')
+
+    @emoter.command()
+    async def prefix(self, ctx, prefix: str):
+
+        try:
+            await self.clientprefs.update_one(
+                {'_id': ctx.author.id},
+                {'$set': {'prefix': prefix}},
+                upsert=True
+            )
+        except Exception as e:
+            await ctx.error(f'Operation failed: {e}')
+        else:
+            prefix = discord.utils.escape_markdown(prefix)
+            await ctx.success(f'Emote prefix set to `{prefix}`')
 
     @emoter.command()
     async def remove(self, ctx, name):
@@ -413,11 +509,7 @@ class Emoter(commands.Cog):
 
         webhook = await utils.get_webhook_for_channel(channel)
         if webhook:
-            message = await webhook.send(
-                username=username,
-                content=message,
-                avatar_url=member.avatar_url,
-                wait=True)
+            await webhook.send(username=username, content=message, avatar_url=member.avatar_url, wait=True)
 
 
 def setup(bot):
