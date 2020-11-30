@@ -88,7 +88,7 @@ class EmoteCollectionUpdater:
 
     async def purge_by_source(self, source_id: str):
         try:
-            deleted = await self.emotes.delete_many({'source': 'bttv'})
+            deleted = await self.emotes.delete_many({'source': source_id})
         except Exception as e:
             print(e)
         else:
