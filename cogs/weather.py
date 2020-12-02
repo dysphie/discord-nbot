@@ -76,11 +76,6 @@ class Weather(commands.Cog):
         embed.add_field(inline=True, name="🍃 **Wind**", value=f'{wind_speed_kmh} km/h\n{wind_speed_mph} mph')
         embed.set_footer(text=address)
 
-        alerts = data.get('alerts')
-        if alerts:
-            for alert in alerts:
-                embed.add_field(inline=True, name=alert['title'], value=alert['description'])
-
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['setloc'])
