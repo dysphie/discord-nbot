@@ -52,7 +52,7 @@ class EmoteCacheUpdater(commands.Cog):
                 if response.status == 200:
                     image = await response.read()
                     try:
-                        await self.guild.create_custom_emoji(name=doc['name'], image=image)
+                        await self.guild.create_custom_emoji(name=doc['_id'], image=image)
                     except discord.HTTPException:
                         pass
                     finally:
