@@ -12,8 +12,23 @@ intents = discord.Intents.default()
 intents.members = True
 
 
-class CustomContext(commands.Context):  # TODO
-    pass
+class CustomContext(commands.Context):
+
+    async def error(self, content):
+        embed = discord.Embed(color=0xf05840, description=f'❌ {content}')
+        await self.send(embed=embed)
+
+    async def warning(self, content):
+        embed = discord.Embed(color=0xffcb05, description=f'⚠️ {content}')
+        await self.send(embed=embed)
+
+    async def success(self, content):
+        embed = discord.Embed(color=0x8cc63e, description=f'✅ {content}')
+        await self.send(embed=embed)
+
+    async def info(self, content):
+        embed = discord.Embed(color=0x41c8f5, description=f'ℹ️ {content}')
+        await self.send(embed=embed)
 
 
 class DiscordBot(commands.Bot):
