@@ -1,6 +1,9 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
+from pprint import pprint
+from time import time
 from typing import TypedDict, Union
 import discord
 from discord.ext import commands
@@ -39,7 +42,7 @@ class Emoter(commands.Cog):
     @emoter.command()
     async def add(self, ctx, name: str, url: str):
         try:
-            emote = await self.upload_emote_from_url(self.emote_guild, name, url)
+            emote = await self.upload_emote_from_url(name, url)
         except discord.HTTPException as e:
             await ctx.error(e)
         else:
@@ -142,96 +145,79 @@ class Emoter(commands.Cog):
     async def on_ready(self):
         self.emote_guild = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
 
-    async def upload_emote_from_url(self, guild, name, url):
+    async def upload_emote_from_url(self, name, url, replacements):
         async with self.bot.session.get(url) as response:
-            if response.status != 200:
-                raise discord.HTTPException(response.status, 'Invalid image URL')
-
             image_bytes = await response.read()
-            emote = await guild.create_custom_emoji(name=name, image=image_bytes)
-            return emote
+            emote = await self.emote_guild.create_custom_emoji(name=name, image=image_bytes)
+            replacements[name] = emote
 
     @commands.Cog.listener()
     @commands.guild_only()
     async def on_message(self, message):
 
+        t = time()
         if message.author.bot:
             return
 
-        emotes_used = []
-
-        #  Find all potential emotes (e.g. $duck)
         prefixed_words = list(set(EMOTE_PATTERN.findall(message.content)))
         if not prefixed_words:
             return
 
-        # Avoid replacing $duck for <:duck:123> before replacing $ducks
-        prefixed_words.sort(key=len, reverse=True)
+        prefixed_words.sort(key=len, reverse=True)  # Avoid replacing nested substrings
+        new_content = message.content
+        print("Variable setup --- %.8f seconds ---" % (time() - t))
 
-        if not self.emote_guild:
-            logging.warning('Emoter: Cache is null.')
-        else:
-            for i, word in enumerate(prefixed_words):
-                # Find emote in local guild
-                emote = discord.utils.find(lambda m: m.name == word, self.emote_guild.emojis)
-                if not emote:
-                    # Give up for now
-                    continue
-
-                message.content = message.content.replace(f'${word}', str(emote))
-                emotes_used.append(word)
-                del prefixed_words[i]
-
-        delete_queue = [message]
+        # if self.emote_guild:
+        #     for i, word in enumerate(prefixed_words):
+        #         emote = discord.utils.find(lambda m: m.name == word, self.emote_guild.emojis)
+        #         if emote:
+        #             new_content = new_content.replace(f'${word}', str(emote))
+        #             del prefixed_words[i]  # TODO: ..is this safe? (´・ω・`)
 
         # Find remaining emotes in database
+
+        replacements = {}
         if prefixed_words:
+            t = time()
+            upload_emotes = []
             async for emote in self.emotes.find({'_id': {'$in': prefixed_words}}):
-                name = emote['_id']
-                try:
-                    emote = await self.upload_emote_from_url(self.emote_guild, name, emote['url'])
-                except discord.HTTPException as e:
-                    logging.warning(f'Error creating emoji "{name}". {e.text}')
-                else:
-                    message.content = message.content.replace(f'${name}', str(emote))
-                    emotes_used.append(name)
-                    delete_queue.append(emote)
+                upload = asyncio.create_task(
+                    self.upload_emote_from_url(emote['_id'], emote['url'], replacements))
+                upload_emotes.append(upload)
 
-        if emotes_used:
-            # Send the emotified message and remove the
-            try:
-                await self.send_as_user(message.author, message.content, message.channel)
-                # sent = await self.send_as_user(message.author, message.content, message.channel)
-            except discord.HTTPException as e:
-                logging.warning(f'Failed to send emoted message. {e.text}')
-            finally:
-                for item in delete_queue:
-                    await item.delete()
+            await asyncio.gather(*upload_emotes)
+            print("Database and upload --- %.8f seconds ---" % (time() - t))
 
-            # Update emote usage statistics (used by the cacher)
-            # TODO: This should be cache cog, where do we put it..?
-            await self.stats.update_many({'_id': {'$in': emotes_used}}, {'$inc': {'uses': 1}}, upsert=True)
+            t = time()
+            for word in prefixed_words:
+                emote = replacements.get(word)
+                if emote:
+                    new_content = new_content.replace(f'${word}', str(emote))
 
-    async def send_as_user(self, member: discord.Member, message: str, channel: discord.TextChannel):
-        """Post a webhook that looks like a message sent by the user."""
+            print("Word replacement --- %.8f seconds ---" % (time() - t))
 
-        # Webhook usernames require at least 2 characters
-        if len(member.display_name) < 2:
-            member.display_name.ljust(2, INVISIBLE_CHAR)
+        t = time()
+        await self.send_as_user(message.author, new_content, message.channel, wait=True)
+        print("Sending message --- %.8f seconds ---" % (time() - t))
+        # Cleanup
+        asyncio.create_task(message.delete())
+        for emote in replacements.values():
+            asyncio.create_task(emote.delete())
 
-        webhook = None
+        # update ++usage many for emote $in prefixed
+
+    async def send_as_user(self, author, content, channel, wait=False):
+
         webhooks = await channel.webhooks()
-        for w in webhooks:
-            if w.user.id == self.bot.user.id:
-                webhook = w
+        webhook = discord.utils.find(lambda m: m.user.id == self.bot.user.id, webhooks)
         if not webhook:
             webhook = await channel.create_webhook(name='NBot')
 
         await webhook.send(
-            username=member.display_name,
-            content=message,
-            avatar_url=member.avatar_url,
-            wait=True
+            username=author.display_name.ljust(2, INVISIBLE_CHAR),  # Username must be 2 digits long
+            content=content,
+            avatar_url=author.avatar_url,
+            wait=wait
         )
 
 

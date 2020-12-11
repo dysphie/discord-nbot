@@ -1,4 +1,3 @@
-import re
 import zlib
 from io import StringIO
 
@@ -7,7 +6,7 @@ from discord.ext import commands
 from markovify import NewlineText
 from motor import motor_asyncio
 
-from cogs import utils
+from disabledcogs import utils
 
 MAX_NAME_LENGTH = 32
 
