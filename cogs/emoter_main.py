@@ -306,18 +306,11 @@ class Emoter(commands.Cog):
     @emoter.command()
     async def add(self, ctx, name: str, url: str):
         try:
-            emote = self.cache.upload_emote(name, url)
-        except discord.HTTPException as e:
-            await ctx.error(e)
+            await self.emotes.insert_one(DatabaseEmote(_id=name, url=url, src=ctx.author.id))
+        except DuplicateKeyError:
+            await ctx.info(f'Emote already exists')
         else:
-            try:
-                await self.emotes.insert_one(DatabaseEmote(_id=name, url=str(emote.url), src=ctx.author.id))
-            except DuplicateKeyError:
-                await ctx.info(f'Emote already exists')
-            else:
-                await ctx.success(f'Added emote `${name}`')
-            finally:
-                await emote.delete()
+            await ctx.success(f"Added emote `${name}`")
 
     @commands.max_concurrency(1)
     @commands.is_owner()
@@ -468,7 +461,7 @@ class Emoter(commands.Cog):
                     content = content.replace(f'${p}', rs)
                     analytics.append(p)
 
-        if to_delete:
+        if analytics:
             # We made replacements, so delete the original message
             # send the emotified version and delete emotes afterwards
             try:
