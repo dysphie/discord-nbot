@@ -2,6 +2,7 @@ import logging
 import math
 import re
 from abc import abstractmethod
+from collections import defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import TypedDict, Union, List, Tuple, Optional
@@ -15,6 +16,7 @@ from pymongo.errors import DuplicateKeyError, BulkWriteError
 from discord.utils import escape_markdown as nomd
 
 EMOTE_PATTERN = re.compile(r'\$([^\s$]+)')
+PARTIAL_CACHED_EMOTE = re.compile(r'(.*)~\d+$')
 INVISIBLE_CHAR = '\u17B5'
 
 
@@ -164,6 +166,7 @@ class Cache:
         self.logs = logs
         self.emotes = emotes
         self.replacements = {}
+        self.build_replacement_table()
 
     async def get_last_update_time(self):
         result = await self.logs.find_one({'_id': 'lastCacheUpdate'})
@@ -201,6 +204,7 @@ class Cache:
 
         print(f'EmoteCacheUpdater: Caching complete. Uploaded: {num_uploaded}')
         await self.logs.update_one({'_id': 'lastCacheUpdate'}, {'$set': {'date': datetime.now()}}, upsert=True)
+        self.build_replacement_table()
         return num_uploaded
 
     async def purge(self):
@@ -239,6 +243,23 @@ class Cache:
                     emotes.append(emote)
 
                 return emotes
+
+    def build_replacement_table(self):
+        replacements = {}
+        partials = defaultdict(list)
+
+        for e in self.guild.emojis:
+            partial = PARTIAL_CACHED_EMOTE.search(e.name)
+            if partial:
+                partials[partial.group(1)].append(e)
+            else:
+                replacements[e.name] = str(e)
+
+        for namespace, emotes in partials.items():
+            emotes.sort(key=lambda x: int(''.join(filter(str.isdigit, x.name))))
+            replacements[namespace] = ''.join([str(e) for e in emotes])
+
+        self.replacements = replacements
 
     @property
     def used(self):
@@ -406,7 +427,8 @@ class Emoter(commands.Cog):
     @commands.guild_only()
     async def on_message(self, message):
 
-        # TODO: Cleanup, optimize, use tasks instead of queued awaits
+        # TODO: This has grown into a mess..
+        #  Weed out data structs, optimize, use tasks instead of queued awaits
 
         if message.author.bot:
             return
@@ -417,32 +439,34 @@ class Emoter(commands.Cog):
 
         prefixed.sort(key=len, reverse=True)
         content = message.content
-        emotes_used = []
+        to_delete = []
+
+        analytics = []
 
         for i, p in enumerate(prefixed):
             r = self.cache.replacements.get(p)
             if r:
                 content = content.replace(f'${p}', r)
-                emotes_used.append(p)
+                analytics.append(p)
                 del prefixed[i]
-
-        delete_queue = [message]
 
         # Find remaining emotes in database
         replacements = {}
         if prefixed:
             async for doc in self.emotes.find({'_id': {'$in': prefixed}}):
                 name, url = doc['_id'], doc['url']
-                replacements[name] = await self.cache.upload_emote(name, url, complex=True)
+                emotes = await self.cache.upload_emote(name, url, complex=True)
+                replacements[name] = ''.join([str(e) for e in emotes])
+                to_delete.extend(emotes)
 
             for p in prefixed:
                 rs = replacements.get(p)
                 if rs:
-                    print(f'Replace: ${p} ===> {"".join(str(r) for r in rs)}')
-                    content = content.replace(f'${p}', ''.join(str(r) for r in rs))
-                    emotes_used.append(p)
+                    print(f'Replace: ${p} ===> {rs}')
+                    content = content.replace(f'${p}', rs)
+                    analytics.append(p)
 
-        if emotes_used:
+        if to_delete:
             # We made replacements, so delete the original message
             # send the emotified version and delete emotes afterwards
             try:
@@ -450,10 +474,11 @@ class Emoter(commands.Cog):
             except discord.HTTPException as e:
                 logging.warning(f'Failed to send emoted message. {e.text}')
             finally:
-                for item in delete_queue:
+                for item in to_delete:
                     await item.delete()
+                await message.delete()
 
-        await self.stats.update_many({'_id': {'$in': emotes_used}}, {'$inc': {'uses': 1}}, upsert=True)
+        await self.stats.update_many({'_id': {'$in': analytics}}, {'$inc': {'uses': 1}}, upsert=True)
 
     async def send_as_user(self, member, content, channel, wait=False):
 
