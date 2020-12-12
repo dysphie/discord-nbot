@@ -226,7 +226,9 @@ class Cache:
                 width, height = pil_img.size
                 num_chunks = math.ceil(width / 48)
                 if num_chunks == 1:
-                    return [img_bytes]
+                    # TODO: This is dumb, dry, revamp
+                    emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
+                    return [emote]
 
                 emotes = []
                 for i in range(num_chunks):
