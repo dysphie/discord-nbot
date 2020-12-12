@@ -6,7 +6,7 @@ from discord.ext import commands
 from markovify import NewlineText
 from motor import motor_asyncio
 
-from disabledcogs import utils
+from cogs import utils
 
 MAX_NAME_LENGTH = 32
 
