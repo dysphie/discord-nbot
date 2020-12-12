@@ -5,8 +5,8 @@ dnspython
 geopy
 markovify
 motor
-nltk
 pymongo
 PyYAML
 aiogoogletrans
 numpy
+Pillow
