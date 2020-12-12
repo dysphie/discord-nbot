@@ -326,7 +326,7 @@ class Emoter(commands.Cog):
     @update.command()
     async def cache(self, ctx):
         await ctx.info('Forcing emote cache update ...')
-        inserted = await ctx.cache.update()
+        inserted = await self.cache.update()
         await ctx.success(f'Cached {inserted} emotes')
 
     @update.command()
