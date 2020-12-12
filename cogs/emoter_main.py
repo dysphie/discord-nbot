@@ -340,6 +340,16 @@ class Emoter(commands.Cog):
 
     @commands.is_owner()
     @emoter.command()
+    async def edit(self, ctx, emote_name: str, url: str):
+        try:
+            await self.blacklist.update_one({'_id': emote_name}, {'$set': {'url': url}})
+        except Exception as e:
+            await ctx.error(e)
+        else:  # TODO: Verbose if doesn't exist
+            await ctx.success(f'Emote `{nomd(emote_name)}` edited')
+
+    @commands.is_owner()
+    @emoter.command()
     async def enable(self, ctx, emote_name: str):
         try:
             result = await self.blacklist.delete_one({'_id': emote_name})
