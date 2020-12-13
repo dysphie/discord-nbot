@@ -1,17 +1,16 @@
 import asyncio
 import logging
 import math
-import queue
 import re
 from abc import abstractmethod
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import BytesIO
+from time import time
 from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
-from discord import Guild
+from discord import Emoji
 from discord.ext import commands, tasks
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo.errors import DuplicateKeyError, BulkWriteError
@@ -159,98 +158,53 @@ class EmoteCollectionUpdater(commands.Cog):
             upsert=True)
 
 
-class CompoundEmote:
-
-    def __init__(self):
-        self.slices = []
-
-    @property
-    def length(self):
-        return len(self.slices)
-
-    def __str__(self):
-        return ''.join([str(e) for e in self.slices])
-
-
 class Cache:
 
-    # TODO: Should emote eviction work on the basis of discord.Emoji or CompoundEmote count?
+    BUFFER_SIZE = 8
 
-    def __init__(self, guild, logs, stats, emotes, session):
-        self.guild: Guild = guild
+    def __init__(self, guild, session):
+        self.guild = guild
         self.session = session
-        self.stats = stats
-        self.logs = logs
-        self.emotes = emotes
-        self.lookup_table = {}
-        self.mra = queue.Queue()
-        self.build_replacement_table()
 
-    async def get_last_update_time(self):
-        result = await self.logs.find_one({'_id': 'lastCacheUpdate'})
-        if result:
-            return result['date']
+        # Ensure a BUFFER_SIZE gap between new insertions and deletions
+        asyncio.create_task(self.ensure_space())
 
-    async def check_for_updates(self):
-        last_update_time = await self.get_last_update_time()
-        if not last_update_time or (datetime.now() - last_update_time).days > 1:
-            await self.update()
+    def get(self, name: str) -> List[Emoji]:
+        return [e for e in self.guild.emojis if re.match(fr'{name}(_\d+)?$', e.name)]
 
-    async def update(self) -> int:
+    async def evict(self, count: int):
+        deleted = 0
+        for emote in sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=True):
+            deleted += await self.delete(emote.name)
+            if deleted >= count:
+                break
 
-        #  TODO: Better sanity checks. $lookup instead of 2 queries
-        await self.purge()
-
-        top_used = set()
-        cursor = self.stats.find({'uses': {'$gt': 0}})
-        cursor.sort('uses', -1).limit(40)
-        async for doc in cursor:
-            top_used.add(doc['_id'])
-
-        num_uploaded = 0
-        async for doc in self.emotes.find({'_id': {'$in': list(top_used)}}):
-            name = doc['_id']
-            try:
-                compound_emote = await self.upload_emote(name=name, url=doc['url'])
-            except discord.HTTPException:
-                pass
-            else:
-                self.lookup_table[name] = str(compound_emote)
-                num_uploaded += compound_emote.length
-                if num_uploaded >= 40:
-                    break
-
-        print(f'EmoteCacheUpdater: Caching complete. Uploaded: {num_uploaded}')
-        await self.logs.update_one({'_id': 'lastCacheUpdate'}, {'$set': {'date': datetime.now()}}, upsert=True)
-        self.build_replacement_table()
-        return num_uploaded
+    async def delete(self, name: str) -> int:
+        emotes = self.get(name)
+        for emote in emotes:
+            print(f'deleted {emote.name} ({str(emote)})')
+            await emote.delete()
+        return len(emotes)
 
     async def purge(self):
-        for e in self.guild.emojis:
-            await e.delete()
-        self.lookup_table.clear()
+        for emote in self.guild.emojis:
+            await emote.delete()
 
-    async def evict(self, num_to_evict: int):
-        for i in range(num_to_evict):
-            compound_emote = self.mra.get()
-            for emote in compound_emote.slices:
-                await emote.delete()
-
-    async def upload_emote(self, name: str, url: str, optimize=False, mra=True) -> CompoundEmote:
+    async def upload(self, name: str, url: str) -> List[Emoji]:
 
         async with self.session.get(url) as response:
             img_bytes = await response.read()
 
+            uploaded: List[Emoji] = []
             with Image.open(BytesIO(img_bytes)) as img_pil:
                 width, height = img_pil.size
                 num_slices = math.ceil(width / height)
 
-                compound_emote = CompoundEmote()
-
                 if num_slices == 1:
                     emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
-                    compound_emote.slices.append(emote)
+                    uploaded = [emote]
                 else:
+                    # TODO: Limit how long emote can be, 3 slices max?
                     for i in range(num_slices):
                         left = height * i
                         right = width if i == num_slices - 1 else height + left
@@ -258,36 +212,42 @@ class Cache:
 
                         slice_io = BytesIO()
                         slice_pil = img_pil.crop(box)
-                        slice_pil.save(slice_io, 'jpg')
+                        slice_pil.save(slice_io, 'PNG')
                         slice_io.seek(0)
 
                         # TODO: Handle failed uploads, we should remove everything if slices are missing
 
-                        emote = await self.guild.create_custom_emoji(name=name, image=slice_io.read())
-                        compound_emote.slices.append(emote)
+                        emote = await self.guild.create_custom_emoji(
+                            name=f'{name}_{i}',
+                            image=slice_io.read()
+                        )
 
-                if mra:
-                    self.mra.put(compound_emote)
-                    asyncio.create_task(self.evict(compound_emote.length))
+                        uploaded.append(emote)
 
-                return compound_emote
+                asyncio.create_task(self.ensure_space())
+                return uploaded
 
-    def build_replacement_table(self):
-        replacements = {}
-        partials = defaultdict(list)
+    async def ensure_space(self):
+        num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
+        if num_to_evict > 0:
+            await self.evict(num_to_evict)
 
-        for e in self.guild.emojis:
-            partial = PARTIAL_CACHED_EMOTE.search(e.name)
-            if partial:
-                partials[partial.group(1)].append(e)
-            else:
-                replacements[e.name] = str(e)
-
-        for namespace, emotes in partials.items():
-            emotes.sort(key=lambda x: int(''.join(filter(str.isdigit, x.name))))
-            replacements[namespace] = ''.join([str(e) for e in emotes])
-
-        self.lookup_table = replacements
+    # def build_lookup_table(self):
+    #     replacements = {}
+    #     partials = defaultdict(list)
+    #
+    #     for e in self.guild.emojis:
+    #         partial = PARTIAL_CACHED_EMOTE.search(e.name)
+    #         if partial:
+    #             partials[partial.group(1)].append(e)
+    #         else:
+    #             replacements[e.name] = str(e)
+    #
+    #     for namespace, emotes in partials.items():
+    #         emotes.sort(key=lambda x: int(''.join(filter(str.isdigit, x.name))))
+    #         replacements[namespace] = ''.join([str(e) for e in emotes])
+    #
+    #     self.lookup_table = replacements
 
     @property
     def used(self):
@@ -296,6 +256,10 @@ class Cache:
     @property
     def max(self):
         return self.guild.emoji_limit
+
+    @property
+    def free(self):
+        return self.max - self.used
 
 
 class Emoter(commands.Cog):
@@ -306,28 +270,54 @@ class Emoter(commands.Cog):
         self.blacklist = bot.db['newporter.blacklist']
         self.stats = bot.db['newporter.stats']
         self.logs = bot.db['newporter.logs']
-        self.cache = None
+        self.cache: Optional[Cache] = None
         self.db_updater = EmoteCollectionUpdater(self.emotes, self.logs, self.session)
         self.bot = bot
 
-    @tasks.loop(hours=12.0)
+    @tasks.loop(hours=1.0)
     async def updater(self):
-        await self.cache.check_for_updates()
         await self.db_updater.check_for_updates()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.updater.start()
         emote_guild = self.bot.get_guild(self.bot.cfg['emote_storage_guild'])
-        self.cache = Cache(emote_guild, self.logs, self.stats, self.emotes, self.session)
+        if emote_guild:
+            self.cache = Cache(emote_guild, self.session)
+
+        self.updater.start()
 
     @commands.group()
     async def emoter(self, ctx):
         pass
 
-    @emoter.command()
-    async def cachetable(self, ctx):
-        await ctx.send(self.cache.lookup_table)
+    @emoter.group()
+    async def db(self, ctx):
+        pass
+
+    @emoter.group()
+    async def cache(self, ctx):
+        pass
+
+    @commands.max_concurrency(1)
+    @commands.is_owner()
+    @cache.command()
+    async def purge(self, ctx):
+        try:
+            await self.cache.purge()
+        except Exception as e:
+            await ctx.error(e)
+        else:
+            await ctx.success('Purged cache')
+
+    @commands.is_owner()
+    @cache.command()
+    async def info(self, ctx):
+        cached_emotes = ''.join(f'`{e.name}` ' for e in self.cache.guild.emojis)
+        embed = discord.Embed(color=0x8cc63e)
+        embed.add_field(inline=True, name='Capacity', value=f'{self.cache.used}/{self.cache.max}')
+        embed.add_field(inline=True, name='Buffer size', value=f'{self.cache.BUFFER_SIZE}')
+        embed.add_field(inline=False, name='Cached', value=cached_emotes or 'None')
+        await ctx.send(embed=embed)
 
     @emoter.command()
     async def add(self, ctx, name: str, url: str):
@@ -340,19 +330,15 @@ class Emoter(commands.Cog):
 
     @commands.max_concurrency(1)
     @commands.is_owner()
-    @emoter.group()
+    @db.command()
     async def update(self, ctx):
-        pass
-
-    @update.command()
-    async def cache(self, ctx):
-        await ctx.info('Forcing emote cache update ...')
-        inserted = await self.cache.update()
-        await ctx.success(f'Cached {inserted} emotes')
-
-    @update.command()
-    async def db(self, ctx):
-        await ctx.info('Forcing emote database update ...')
+        try:
+            await ctx.info('Forcing emote database update ...')
+            await self.db_updater.update()
+        except Exception as e:
+            await ctx.error(e)
+        else:
+            await ctx.success('Emote database updated')
 
     @commands.is_owner()
     @emoter.command()
@@ -392,43 +378,14 @@ class Emoter(commands.Cog):
         doc = await self.emotes.find_one_and_delete({'_id': name, 'src': ctx.author.id})
         await ctx.success(f'Deleted emote `${name}`' if doc else 'Emote not found or you are not the owner')
 
-    @emoter.command()
-    async def info(self, ctx):
-
-        # Emote collection info
-        last_updated, success = await self.db_updater.get_last_update_info()
-        if last_updated:
-            time_difference = datetime.now() - last_updated
-            hours_passed = round(time_difference / timedelta(hours=1))
-            db_update_info = f'{hours_passed} hours ago {"" if success else " (Failed)"}'
-        else:
-            db_update_info = 'Never'
-
-        # Emote cache info
-        last_updated = await self.cache.get_last_update_time()
-        if last_updated:
-            hours_passed = round((datetime.now() - last_updated) / timedelta(hours=1))
-            cache_update_info = f'{hours_passed} hours ago'
-        else:
-            cache_update_info = 'Never'
-
-        emote_db_count = await self.emotes.count_documents({})
-        cached_emotes = ' '.join([f'`{nomd(e.name)}`' for e in self.cache.guild.emojis]) or 'None'
-
-        embed = discord.Embed(description='_ _', color=0x99EE44)
-        embed.add_field(inline=False, name='Emotes in cache', value=cached_emotes)
-        embed.add_field(inline=False, name='Cache capacity', value=f'{self.cache.used}/{self.cache.max}')
-        embed.add_field(inline=False, name='Emotes in database', value=emote_db_count)
-        embed.add_field(inline=False, name='Last updated emote database', value=db_update_info)
-        embed.add_field(inline=False, name='Last updated emote cache', value=cache_update_info)
-        await ctx.send(embed=embed)
-
     @commands.Cog.listener()
     @commands.guild_only()
     async def on_message(self, message):
 
         # TODO: This has grown into a mess..
         #  Weed out data structs, optimize, use tasks instead of queued awaits
+
+        start = time()
 
         if message.author.bot:
             return
@@ -439,17 +396,28 @@ class Emoter(commands.Cog):
             return
 
         for i, p in enumerate(list(prefixed)):
-            replacement = self.cache.lookup_table.get(p)
-            if replacement:
-                content = content.replace(f'${p}', replacement)
+            emotes = self.cache.get(p)
+            if emotes:
+                content = content.replace(f'${p}', ''.join(str(e) for e in emotes))
                 del prefixed[i]
 
         if prefixed:
             async for doc in self.emotes.find({'_id': {'$in': prefixed}}):
                 name, url = doc['_id'], doc['url']
-                compound_emote = await self.cache.upload_emote(name, url)
-                if compound_emote:
-                    content = content.replace(f'${name}', str(compound_emote))
+                emotes = await self.cache.upload(name, url)
+                if emotes:
+                    content = content.replace(f'${name}', ''.join(str(e) for e in emotes))
+
+        end = time()
+
+        if content != message.content:  # Optimize?
+            try:
+                await self.send_as_user(message.author, content, message.channel)
+                await message.channel.send('Emoting took %s seconds' % (end - start))
+            except Exception as e:
+                logging.warning(e)
+            else:
+                await message.delete()
 
     async def send_as_user(self, member, content, channel, wait=False):
 
