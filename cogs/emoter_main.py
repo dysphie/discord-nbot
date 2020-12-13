@@ -187,44 +187,58 @@ class Cache:
         for emote in self.guild.emojis:
             await emote.delete()
 
-    async def upload(self, name: str, url: str) -> List[Emoji]:
+    @staticmethod
+    def preprocess_emote(img_bytes: bytes) -> List[bytes]:
+
+        # TODO: Width should be rounded to the closest multiplier of 48
+        #  Current implementation creates ghost emote (empty)
         CELL_MAX = 48
+        with Image.open(BytesIO(img_bytes)) as original:
+            if original.is_animated:  # gifs are scary just ignore them
+                return [img_bytes]
+
+            width, height = original.size
+            original.thumbnail((CELL_MAX * 3, CELL_MAX))
+            num_slices = int(math.ceil(width / CELL_MAX))
+            if num_slices <= 1:
+                return [img_bytes]
+
+            slices = []
+            for i in range(num_slices):
+                left = i * CELL_MAX
+                right = left + CELL_MAX
+                bbox = (left, 0, right, height)
+                slice_ = original.crop(bbox)
+                slice_io = BytesIO()
+                slice_.save(slice_io, 'PNG')
+                slice_io.seek(0)
+                slices.append(slice_io.read())
+
+            return slices
+
+    async def upload_emote(self, name: str, url: str) -> List[Emoji]:
+
+        # TODO: Don't prefix single-image emotes
         async with self.session.get(url) as response:
             if response.status != 200:
                 return []
-            img_bytes = await response.read()
 
-            with Image.open(BytesIO(img_bytes)) as original:
-                width, height = original.size
-                original.thumbnail((CELL_MAX * 3, CELL_MAX))
-                num_slices = int(math.ceil(width / CELL_MAX))
+            img = await response.read()
+            sliced_imgs = self.preprocess_emote(img)
 
-                uploaded = []
-                if num_slices == 1:
-                    emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
-                    uploaded = [emote]
+            uploaded = []
+            for i, slice_ in enumerate(sliced_imgs):
+                try:
+                    emote = await self.guild.create_custom_emoji(name=f'{name}_{i}', image=slice_)
+                except Exception as e:  # If a slice fails, all slices must fail
+                    for u in uploaded:
+                        await u.delete()
+                    return []
                 else:
-                    for i in range(num_slices):
-                        left = i * CELL_MAX
-                        right = left + CELL_MAX
-                        bbox = (left, 0, right, height)
-                        slice_ = original.crop(bbox)
+                    uploaded.append(emote)
 
-                        slice_io = BytesIO()
-                        slice_.save(slice_io, 'PNG')
-                        slice_io.seek(0)
-
-                        # TODO: Handle failed uploads, we should remove everything if slices are missing
-
-                        emote = await self.guild.create_custom_emoji(
-                            name=f'{name}_{i}',
-                            image=slice_io.read()
-                        )
-
-                        uploaded.append(emote)
-
-                asyncio.create_task(self.ensure_space())
-                return uploaded
+            asyncio.create_task(self.ensure_space())
+            return uploaded
 
     async def ensure_space(self):
         num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
@@ -403,7 +417,7 @@ class Emoter(commands.Cog):
         if prefixed:
             async for doc in self.emotes.find({'_id': {'$in': prefixed}}):
                 name, url = doc['_id'], doc['url']
-                emotes = await self.cache.upload(name, url)
+                emotes = await self.cache.upload_emote(name, url)
                 if emotes:
                     content = content.replace(f'${name}', ''.join(str(e) for e in emotes))
 
