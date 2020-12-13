@@ -199,7 +199,7 @@ class Cache:
             with Image.open(BytesIO(img_bytes)) as img_pil:
                 img_pil.thumbnail((144,48))
                 width, height = img_pil.size
-                num_slices = math.ceil(width / 48)
+                num_slices = math.ceil(width / height)
 
                 if num_slices == 1:
                     emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
