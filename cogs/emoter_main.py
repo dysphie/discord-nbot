@@ -413,7 +413,6 @@ class Emoter(commands.Cog):
         if content != message.content:  # Optimize?
             try:
                 await self.send_as_user(message.author, content, message.channel)
-                await message.channel.send('Emoting took %s seconds' % (end - start))
             except Exception as e:
                 logging.warning(e)
             else:
