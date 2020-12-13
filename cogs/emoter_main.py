@@ -196,7 +196,7 @@ class Cache:
 
             with Image.open(BytesIO(img_bytes)) as original:
                 width, height = original.size
-                original.thumbnail((CELL_MAX * 2, CELL_MAX))
+                original.thumbnail((CELL_MAX * 3, CELL_MAX))
                 num_slices = int(math.ceil(width / CELL_MAX))
 
                 uploaded = []
