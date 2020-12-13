@@ -69,19 +69,16 @@ class BttvFetcher(ApiFetcher):
                 async with self.session.get(url, params=self.params) as r:
                     data = await r.json()
                     for e in data:
-                        if e['imageType'] != 'gif':
-                            continue
-                        emote = DatabaseEmote(
-                            _id=e['emote']['code'],
-                            url=f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
-                            src=self.uid
-                        )
-                        emotes.append(emote)
+                        if e['emote']['imageType'] == 'gif':
+                            emote = DatabaseEmote(
+                                _id=e['emote']['code'],
+                                url=f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
+                                src=self.uid
+                            )
+                            emotes.append(emote)
 
-                    if not emotes:
-                        break
-
-                    await self.save_emotes(emotes)
+                    if emotes:
+                        await self.save_emotes(emotes)
 
         new_total = await self.collection.count_documents({'src': self.uid})
         return new_total
@@ -108,7 +105,7 @@ class FfzFetcher(ApiFetcher):
                 for e in data['emoticons']:
                     emote = DatabaseEmote(
                         _id=e['name'], src=self.uid,
-                        url=e['urls'].get('2') or e['urls'].get('1')
+                        url=f"https:{e['urls'].get('2') or e['urls'].get('1')}"
                     )
                     emotes.append(emote)
                 await self.save_emotes(emotes)
@@ -184,7 +181,6 @@ class Cache:
     async def delete(self, name: str) -> int:
         emotes = self.get(name)
         for emote in emotes:
-            print(f'deleted {emote.name} ({str(emote)})')
             await emote.delete()
         return len(emotes)
 
@@ -195,6 +191,8 @@ class Cache:
     async def upload(self, name: str, url: str) -> List[Emoji]:
 
         async with self.session.get(url) as response:
+            if response.status != 200:
+                return []
             img_bytes = await response.read()
 
             uploaded: List[Emoji] = []
