@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import math
+import queue
 import re
 from abc import abstractmethod
 from collections import defaultdict
@@ -9,7 +11,7 @@ from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
-from discord import Emoji, Guild
+from discord import Guild
 from discord.ext import commands, tasks
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo.errors import DuplicateKeyError, BulkWriteError
@@ -157,7 +159,22 @@ class EmoteCollectionUpdater(commands.Cog):
             upsert=True)
 
 
+class CompoundEmote:
+
+    def __init__(self):
+        self.slices = []
+
+    @property
+    def length(self):
+        return len(self.slices)
+
+    def __str__(self):
+        return ''.join([str(e) for e in self.slices])
+
+
 class Cache:
+
+    # TODO: Should emote eviction work on the basis of discord.Emoji or CompoundEmote count?
 
     def __init__(self, guild, logs, stats, emotes, session):
         self.guild: Guild = guild
@@ -165,7 +182,8 @@ class Cache:
         self.stats = stats
         self.logs = logs
         self.emotes = emotes
-        self.replacements = {}
+        self.lookup_table = {}
+        self.mra = queue.Queue()
         self.build_replacement_table()
 
     async def get_last_update_time(self):
@@ -193,12 +211,12 @@ class Cache:
         async for doc in self.emotes.find({'_id': {'$in': list(top_used)}}):
             name = doc['_id']
             try:
-                emotes = await self.upload_emote(name=name, url=doc['url'], complex=True)
+                compound_emote = await self.upload_emote(name=name, url=doc['url'])
             except discord.HTTPException:
                 pass
             else:
-                self.replacements[name] = ''.join(e.name for e in emotes)
-                num_uploaded += len(emotes)
+                self.lookup_table[name] = str(compound_emote)
+                num_uploaded += compound_emote.length
                 if num_uploaded >= 40:
                     break
 
@@ -210,41 +228,49 @@ class Cache:
     async def purge(self):
         for e in self.guild.emojis:
             await e.delete()
-        self.replacements.clear()
+        self.lookup_table.clear()
 
-    async def upload_emote(self, name: str, url: str, complex=False) -> Union[Emoji, List[Emoji]]:
+    async def evict(self, num_to_evict: int):
+        for i in range(num_to_evict):
+            compound_emote = self.mra.get()
+            for emote in compound_emote.slices:
+                await emote.delete()
 
-        async with self.session.get(url) as r:
-            img_bytes = await r.read()
+    async def upload_emote(self, name: str, url: str, optimize=False, mra=True) -> CompoundEmote:
 
-        if not complex:
-            emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
-            return emote
-        else:
-            with Image.open(BytesIO(img_bytes)) as pil_img:
-                pil_img.thumbnail((144, 48))
-                width, height = pil_img.size
-                num_chunks = math.ceil(width / 48)
-                if num_chunks == 1:
-                    # TODO: This is dumb, dry, revamp
+        async with self.session.get(url) as response:
+            img_bytes = await response.read()
+
+            with Image.open(BytesIO(img_bytes)) as img_pil:
+                width, height = img_pil.size
+                num_slices = math.ceil(width / height)
+
+                compound_emote = CompoundEmote()
+
+                if num_slices == 1:
                     emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
-                    return [emote]
+                    compound_emote.slices.append(emote)
+                else:
+                    for i in range(num_slices):
+                        left = height * i
+                        right = width if i == num_slices - 1 else height + left
+                        box = (left, 0, right, height)
 
-                emotes = []
-                for i in range(num_chunks):
-                    left = 48 * i
-                    right = width if i == num_chunks - 1 else 48 + left
-                    box = (left, 0, right, height)
+                        slice_io = BytesIO()
+                        slice_pil = img_pil.crop(box)
+                        slice_pil.save(slice_io, 'jpg')
+                        slice_io.seek(0)
 
-                    chunk_img_bytes = BytesIO()
-                    chunk_img = pil_img.crop(box)
-                    chunk_img.save(chunk_img_bytes, "png")  # TODO: Dont hardcode ext
-                    chunk_img_bytes.seek(0)
+                        # TODO: Handle failed uploads, we should remove everything if slices are missing
 
-                    emote = await self.guild.create_custom_emoji(name=name, image=chunk_img_bytes.read())
-                    emotes.append(emote)
+                        emote = await self.guild.create_custom_emoji(name=name, image=slice_io.read())
+                        compound_emote.slices.append(emote)
 
-                return emotes
+                if mra:
+                    self.mra.put(compound_emote)
+                    asyncio.create_task(self.evict(compound_emote.length))
+
+                return compound_emote
 
     def build_replacement_table(self):
         replacements = {}
@@ -261,7 +287,7 @@ class Cache:
             emotes.sort(key=lambda x: int(''.join(filter(str.isdigit, x.name))))
             replacements[namespace] = ''.join([str(e) for e in emotes])
 
-        self.replacements = replacements
+        self.lookup_table = replacements
 
     @property
     def used(self):
@@ -301,7 +327,7 @@ class Emoter(commands.Cog):
 
     @emoter.command()
     async def cachetable(self, ctx):
-        await ctx.send(self.cache.replacements)
+        await ctx.send(self.cache.lookup_table)
 
     @emoter.command()
     async def add(self, ctx, name: str, url: str):
@@ -397,37 +423,6 @@ class Emoter(commands.Cog):
         embed.add_field(inline=False, name='Last updated emote cache', value=cache_update_info)
         await ctx.send(embed=embed)
 
-    @staticmethod
-    async def process_emote(img_bytes: bytes) -> List[bytes]:
-        max_size = (144, 48)
-        with Image.open(BytesIO(img_bytes)) as pil_img:
-
-            pil_img.thumbnail(max_size)
-            width, height = pil_img.size
-            if width <= 48:
-                return [img_bytes]
-            else:
-                print('too wide, split into chunks')
-
-                results = []
-
-                num_chunks = int(width / 48)
-                for i in range(num_chunks):
-                    left = 48 * i
-                    if i == num_chunks - 1:
-                        right = width
-                    else:
-                        right = 48 + left
-                    box = (left, 0, right, height)
-
-                    bytesio = BytesIO()
-                    chunk = pil_img.crop(box)
-                    chunk.save(bytesio, "png")
-                    bytesio.seek(0)
-                    results.append(bytesio.read())
-
-                return results
-
     @commands.Cog.listener()
     @commands.guild_only()
     async def on_message(self, message):
@@ -438,52 +433,23 @@ class Emoter(commands.Cog):
         if message.author.bot:
             return
 
-        prefixed = list(set(EMOTE_PATTERN.findall(message.content)))
+        content = message.content
+        prefixed = sorted(set(EMOTE_PATTERN.findall(content)), key=len, reverse=True)
         if not prefixed:
             return
 
-        prefixed.sort(key=len, reverse=True)
-        content = message.content
-        to_delete = []
-
-        analytics = []
-
-        for i, p in enumerate(prefixed):
-            r = self.cache.replacements.get(p)
-            if r:
-                content = content.replace(f'${p}', r)
-                analytics.append(p)
+        for i, p in enumerate(list(prefixed)):
+            replacement = self.cache.lookup_table.get(p)
+            if replacement:
+                content = content.replace(f'${p}', replacement)
                 del prefixed[i]
 
-        # Find remaining emotes in database
-        replacements = {}
         if prefixed:
             async for doc in self.emotes.find({'_id': {'$in': prefixed}}):
                 name, url = doc['_id'], doc['url']
-                emotes = await self.cache.upload_emote(name, url, complex=True)
-                replacements[name] = ''.join([str(e) for e in emotes])
-                to_delete.extend(emotes)
-
-            for p in prefixed:
-                rs = replacements.get(p)
-                if rs:
-                    print(f'Replace: ${p} ===> {rs}')
-                    content = content.replace(f'${p}', rs)
-                    analytics.append(p)
-
-        if analytics:
-            # We made replacements, so delete the original message
-            # send the emotified version and delete emotes afterwards
-            try:
-                await self.send_as_user(message.author, content, message.channel, wait=True)
-            except discord.HTTPException as e:
-                logging.warning(f'Failed to send emoted message. {e.text}')
-            finally:
-                for item in to_delete:
-                    await item.delete()
-                await message.delete()
-
-        await self.stats.update_many({'_id': {'$in': analytics}}, {'$inc': {'uses': 1}}, upsert=True)
+                compound_emote = await self.cache.upload_emote(name, url)
+                if compound_emote:
+                    content = content.replace(f'${name}', str(compound_emote))
 
     async def send_as_user(self, member, content, channel, wait=False):
 
