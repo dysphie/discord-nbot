@@ -158,7 +158,6 @@ class EmoteCollectionUpdater(commands.Cog):
 
 
 class Cache:
-
     BUFFER_SIZE = 8
 
     def __init__(self, guild, session):
@@ -189,31 +188,30 @@ class Cache:
             await emote.delete()
 
     async def upload(self, name: str, url: str) -> List[Emoji]:
-
+        CELL_MAX = 48
         async with self.session.get(url) as response:
             if response.status != 200:
                 return []
             img_bytes = await response.read()
 
-            uploaded: List[Emoji] = []
-            with Image.open(BytesIO(img_bytes)) as img_pil:
-                img_pil.thumbnail((144,48))
-                width, height = img_pil.size
-                num_slices = math.ceil(width / height)
+            with Image.open(BytesIO(img_bytes)) as original:
+                width, height = original.size
+                original.thumbnail((CELL_MAX * 3, CELL_MAX))
+                num_slices = int(math.ceil(width / CELL_MAX))
 
+                uploaded = []
                 if num_slices == 1:
                     emote = await self.guild.create_custom_emoji(name=name, image=img_bytes)
                     uploaded = [emote]
                 else:
-                    # TODO: Limit how long emote can be, 3 slices max?
                     for i in range(num_slices):
-                        left = height * i
-                        right = width if i == num_slices - 1 else height + left
-                        box = (left, 0, right, height)
+                        left = i * CELL_MAX
+                        right = left + CELL_MAX
+                        bbox = (left, 0, right, height)
+                        slice_ = original.crop(bbox)
 
                         slice_io = BytesIO()
-                        slice_pil = img_pil.crop(box)
-                        slice_pil.save(slice_io, 'PNG')
+                        slice_.save(slice_io, 'PNG')
                         slice_io.seek(0)
 
                         # TODO: Handle failed uploads, we should remove everything if slices are missing
