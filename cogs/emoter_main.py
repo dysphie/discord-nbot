@@ -197,6 +197,7 @@ class Cache:
 
             uploaded: List[Emoji] = []
             with Image.open(BytesIO(img_bytes)) as img_pil:
+                img_pil.thumbnail((144,48))
                 width, height = img_pil.size
                 num_slices = math.ceil(width / height)
 
