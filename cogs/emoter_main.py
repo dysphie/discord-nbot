@@ -69,6 +69,8 @@ class BttvFetcher(ApiFetcher):
                 async with self.session.get(url, params=self.params) as r:
                     data = await r.json()
                     for e in data:
+                        if e['imageType'] != 'gif':
+                            continue
                         emote = DatabaseEmote(
                             _id=e['emote']['code'],
                             url=f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
