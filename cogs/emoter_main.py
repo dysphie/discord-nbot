@@ -192,27 +192,53 @@ class Cache:
 
         # TODO: Width should be rounded to the closest multiplier of 48
         #  Current implementation creates ghost emote (empty)
-        CELL_MAX = 48
-        with Image.open(BytesIO(img_bytes)) as original:
-            if original.is_animated:  # gifs are scary just ignore them
+        slot_max = 48
+        with Image.open(BytesIO(img_bytes)) as img:
+            cur_width, cur_height = img.size
+            # Don't act on GIFs or properly sized emotes
+            if (cur_width <= slot_max and cur_height <= slot_max) or img.is_animated:
                 return [img_bytes]
 
-            width, height = original.size
-            original.thumbnail((CELL_MAX * 3, CELL_MAX))
-            num_slices = int(math.ceil(width / CELL_MAX))
-            if num_slices <= 1:
-                return [img_bytes]
+            # Set max height to 48px, scale width accordingly
+            new_height = slot_max
+            new_width = int(new_height * cur_width / cur_height)
 
+            # Calculate how many emote slots the image would occupy
+            num_slots = new_width / slot_max
+
+            # If the image would barely occupy the last slot, scale down by one
+            if num_slots > 1 and num_slots % 1 < 0.4:
+                final_width = new_width - (new_width % slot_max)
+                # And finally scale the height based on the rounded down width
+                final_height = int(final_width * new_height / new_width)
+                num_slots -= 1
+            else:
+                final_width = new_width
+                final_height = new_height
+                
+            num_slots = math.ceil(num_slots)
+
+            # Perform actual resize operation
+            img.resize((final_width, final_height))
+
+            # If the emote is single-image, we are done, return bytes
+            if num_slots == 1:
+                with BytesIO() as io:
+                    img.save(io, 'PNG')
+                    io.seek(0)
+                    return [io.read()]
+
+            # Else slice..
             slices = []
-            for i in range(num_slices):
-                left = i * CELL_MAX
-                right = left + CELL_MAX
-                bbox = (left, 0, right, height)
-                slice_ = original.crop(bbox)
-                slice_io = BytesIO()
-                slice_.save(slice_io, 'PNG')
-                slice_io.seek(0)
-                slices.append(slice_io.read())
+            for i in range(num_slots):
+                left = i * slot_max
+                right = left + slot_max
+                bbox = (left, 0, right, final_height)
+                slice_ = img.crop(bbox)
+                with BytesIO() as io:
+                    slice_.save(io, 'PNG')
+                    io.seek(0)
+                    slices.append(io.read())
 
             return slices
 
@@ -230,7 +256,7 @@ class Cache:
             for i, slice_ in enumerate(sliced_imgs):
                 try:
                     emote = await self.guild.create_custom_emoji(name=f'{name}_{i}', image=slice_)
-                except Exception as e:  # If a slice fails, all slices must fail
+                except Exception:  # If a slice fails, all slices must fail
                     for u in uploaded:
                         await u.delete()
                     return []
@@ -398,8 +424,6 @@ class Emoter(commands.Cog):
         # TODO: This has grown into a mess..
         #  Weed out data structs, optimize, use tasks instead of queued awaits
 
-        start = time()
-
         if message.author.bot:
             return
 
@@ -420,8 +444,6 @@ class Emoter(commands.Cog):
                 emotes = await self.cache.upload_emote(name, url)
                 if emotes:
                     content = content.replace(f'${name}', ''.join(str(e) for e in emotes))
-
-        end = time()
 
         if content != message.content:  # Optimize?
             try:
