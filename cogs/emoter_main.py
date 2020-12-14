@@ -219,7 +219,7 @@ class Cache:
             num_slots = math.ceil(num_slots)
 
             # Perform actual resize operation
-            img.resize((final_width, final_height))
+            img = img.resize((final_width, final_height))
 
             # If the emote is single-image, we are done, return bytes
             if num_slots == 1:
