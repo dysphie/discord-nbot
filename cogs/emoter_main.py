@@ -155,9 +155,6 @@ class EmoteCollectionUpdater(commands.Cog):
         return None, None
 
     async def check_for_updates(self):
-        await self.update()  # FIXME: just for testing
-        return
-
         logging.debug(f'Checking for emote updates..')
         last_update_time, success = await self.get_last_update_info()
         logging.debug(f'Last update: {last_update_time} (Success: {success})')
