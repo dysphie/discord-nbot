@@ -13,6 +13,7 @@ from aiohttp import ClientSession
 from discord import Emoji
 from discord.ext import commands, tasks
 from motor.motor_asyncio import AsyncIOMotorCollection
+from pymongo import InsertOne, UpdateOne
 from pymongo.errors import DuplicateKeyError, BulkWriteError
 from discord.utils import escape_markdown as nomd
 
@@ -29,8 +30,7 @@ class DatabaseEmote(TypedDict):
 
 class ApiFetcher:
 
-    def __init__(self, uid, collection: AsyncIOMotorCollection, session: ClientSession):
-        self.uid = uid
+    def __init__(self, collection: AsyncIOMotorCollection, session: ClientSession):
         self.collection = collection
         self.session = session
 
@@ -47,7 +47,7 @@ class ApiFetcher:
         else:
             num_inserted = len(result.inserted_ids)
         finally:
-            print(f'[{self.uid}] Inserted {num_inserted}')
+            print(f'[...] Inserted {num_inserted}')
 
 
 class BttvFetcher(ApiFetcher):
@@ -59,28 +59,37 @@ class BttvFetcher(ApiFetcher):
 
     async def fetch(self) -> int:
 
-        print(f'[{self.uid}] Beggining fetch')
-        await self.collection.delete_many({'src': self.uid})
+        print(f'[BTTV] Beggining fetch')
 
         for section, url in self.urls.items():
-            for i in range(0, 200):
+            for i in range(0, 100):
+                bulk = []
                 self.params['offset'] = i * 100
-                emotes = []
                 async with self.session.get(url, params=self.params) as r:
                     data = await r.json()
                     for e in data:
-                        if e['emote']['imageType'] == 'gif':
-                            emote = DatabaseEmote(
-                                _id=e['emote']['code'],
-                                url=f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
-                                src=self.uid
-                            )
-                            emotes.append(emote)
+                        bulk.append(
+                            InsertOne({
+                                '_id': e['emote']['code'],
+                                'src': 'bttv',
+                                'url': f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
+                                'animated': e['emote']['imageType'] == 'gif'
+                            })
+                        )
 
-                    if emotes:
-                        await self.save_emotes(emotes)
+                    if bulk:
+                        try:
+                            result = await self.collection.bulk_write(bulk, ordered=False)
+                        except BulkWriteError as bwe:
+                            num_inserted = bwe.details['nInserted']
+                            print('bwe bttv')
+                        else:
+                            print('allgood bttv')
+                            num_inserted = len(result.inserted_ids)
+                        finally:
+                            print(f'[BTTV] Inserted {num_inserted}')
 
-        new_total = await self.collection.count_documents({'src': self.uid})
+        new_total = await self.collection.count_documents({'src': 'bttv'})
         return new_total
 
 
@@ -95,24 +104,37 @@ class FfzFetcher(ApiFetcher):
 
     async def fetch(self):
 
-        print(f'[{self.uid}] Beggining fetch')
-        await self.collection.delete_many({'src': self.uid})
+        print(f'[FFZ] Beggining fetch')
 
-        while self.params['page'] <= 200:
+        while self.params['page'] <= 50:
             async with self.session.get(self.url, params=self.params) as r:
                 data = await r.json()
-                emotes = []
+                bulk = []
                 for e in data['emoticons']:
-                    emote = DatabaseEmote(
-                        _id=e['name'], src=self.uid,
-                        url=f"https:{e['urls'].get('2') or e['urls'].get('1')}"
-                    )
-                    emotes.append(emote)
-                await self.save_emotes(emotes)
+                    name = e['name']
+                    url = f"https:{e['urls'].get('2') or e['urls'].get('1')}"
+                    bulk.append(UpdateOne(
+                        {'_id': name, 'src': 'bttv', 'animated': False},
+                        {'$set': {'src': 'ffz', 'url': url}},
+                        upsert=True
+                    ))
+
+                if not bulk:
+                    continue
+
+                num_inserted = 0
+                try:
+                    result = await self.collection.bulk_write(bulk, ordered=False)
+                except BulkWriteError as bwe:
+                    num_inserted = bwe.details['nInserted']
+                else:
+                    num_inserted = len(result.inserted_ids)
+                finally:
+                    print(f'[FFZ] Inserted {num_inserted}')
 
             self.params['page'] += 1
 
-        new_total = await self.collection.count_documents({'src': self.uid})
+        new_total = await self.collection.count_documents({'src': 'ffz'})
         return new_total
 
 
@@ -123,17 +145,19 @@ class EmoteCollectionUpdater(commands.Cog):
         self.emotes = emotes
         self.logs = logs
 
-        bttv = BttvFetcher(uid=1, collection=self.emotes, session=self.session)
-        ffz = FfzFetcher(uid=2, collection=self.emotes, session=self.session)
-        self.apis = (bttv, ffz)
+        self.bttv = BttvFetcher(collection=self.emotes, session=self.session)
+        self.ffz = FfzFetcher(collection=self.emotes, session=self.session)
 
     async def get_last_update_info(self) -> Tuple[Optional[datetime], Optional[bool]]:
-
         result = await self.logs.find_one({'_id': 'lastEmoteCollectionUpdate'})
         if result:
             return result['date'], result['success']
+        return None, None
 
     async def check_for_updates(self):
+        await self.update()  # FIXME: just for testing
+        return
+
         logging.debug(f'Checking for emote updates..')
         last_update_time, success = await self.get_last_update_info()
         logging.debug(f'Last update: {last_update_time} (Success: {success})')
@@ -144,8 +168,10 @@ class EmoteCollectionUpdater(commands.Cog):
         logging.debug('Begin emote update..')
         success = False
         try:
-            for api in self.apis:
-                await api.fetch()
+            await self.emotes.delete_many({'src': {'$ne': 'user'}})
+            print('deleted existing')
+            await self.bttv.fetch()
+            await self.ffz.fetch()
         except Exception as e:
             logging.error(f'Something went wrong updating the emote collection: {e}')
         else:
@@ -215,7 +241,7 @@ class Cache:
             else:
                 final_width = new_width
                 final_height = new_height
-                
+
             num_slots = math.ceil(num_slots)
 
             # Perform actual resize operation
@@ -305,10 +331,10 @@ class Emoter(commands.Cog):
 
     def __init__(self, bot):
         self.session = bot.session
-        self.emotes = bot.db['newporter.emotes']
-        self.blacklist = bot.db['newporter.blacklist']
-        self.stats = bot.db['newporter.stats']
-        self.logs = bot.db['newporter.logs']
+        self.emotes = bot.db['emoter.emotes']
+        self.blacklist = bot.db['emoter.blacklist']
+        self.stats = bot.db['emoter.stats']
+        self.logs = bot.db['emoter.logs']
         self.cache: Optional[Cache] = None
         self.db_updater = EmoteCollectionUpdater(self.emotes, self.logs, self.session)
         self.bot = bot
@@ -428,7 +454,8 @@ class Emoter(commands.Cog):
             return
 
         content = message.content
-        prefixed = sorted(set(EMOTE_PATTERN.findall(content)), key=len, reverse=True)
+        prefixed = list(set(EMOTE_PATTERN.findall(content)))
+        prefixed.sort(key=len, reverse=True)
         if not prefixed:
             return
 
