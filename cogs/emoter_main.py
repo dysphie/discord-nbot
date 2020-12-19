@@ -195,7 +195,7 @@ class Cache:
 
     async def evict(self, count: int):
         deleted = 0
-        for emote in sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=True):
+        for emote in sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=False):
             deleted += await self.delete(emote.name)
             if deleted >= count:
                 break
