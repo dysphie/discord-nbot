@@ -82,9 +82,7 @@ class BttvFetcher(ApiFetcher):
                             result = await self.collection.bulk_write(bulk, ordered=False)
                         except BulkWriteError as bwe:
                             num_inserted = bwe.details['nInserted']
-                            print('bwe bttv')
                         else:
-                            print('allgood bttv')
                             num_inserted = len(result.inserted_ids)
                         finally:
                             print(f'[BTTV] Inserted {num_inserted}')
@@ -122,6 +120,7 @@ class FfzFetcher(ApiFetcher):
                 if not bulk:
                     continue
 
+                # TODO: Now that we update rather than insert, num_inserted returns 0
                 num_inserted = 0
                 try:
                     result = await self.collection.bulk_write(bulk, ordered=False)
@@ -191,7 +190,7 @@ class Cache:
         asyncio.create_task(self.ensure_space())
 
     def get(self, name: str) -> List[Emoji]:
-        return [e for e in self.guild.emojis if re.match(fr'{name}(_\d+)?$', e.name)]
+        return [e for e in self.guild.emojis if re.match(fr'{re.escape(name)}(_\d+)?$', e.name)]
 
     async def evict(self, count: int):
         deleted = 0
