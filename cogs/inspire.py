@@ -14,7 +14,7 @@ class Inspire(commands.Cog, name="Inspire"):
             if r.status != 200:
                 return await ctx.error('Could not fetch file...')
 
-            img_url = await r.read()
+            img_url = await r.text()
             embed = discord.Embed(color=0x7fffd4)
             embed.set_image(url=img_url)
             await ctx.send(embed=embed)
