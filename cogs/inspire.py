@@ -14,8 +14,8 @@ class Inspire(commands.Cog, name="Inspire"):
             if r.status != 200:
                 return await ctx.error('Could not fetch file...')
 
-            data = BytesIO(await r.read())
-            await ctx.send(file=discord.File(data, 'inspiration.png'))
+            imgurl = await r.read()
+            await ctx.send(imgurl)
 
 
 def setup(bot):
