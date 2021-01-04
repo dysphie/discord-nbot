@@ -5,7 +5,6 @@ import re
 from abc import abstractmethod
 from datetime import datetime
 from io import BytesIO
-from time import time
 from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
@@ -264,12 +263,12 @@ class Cache:
 
             return slices
 
-    async def upload_emote(self, name: str, url: str) -> List[Emoji]:
+    async def upload_emote(self, name: str, url: str, replacement_table=None):
 
         # TODO: Don't prefix single-image emotes
         async with self.session.get(url) as response:
             if response.status != 200:
-                return []
+                return
 
             img = await response.read()
             sliced_imgs = self.preprocess_emote(img)
@@ -281,12 +280,14 @@ class Cache:
                 except Exception:  # If a slice fails, all slices must fail
                     for u in uploaded:
                         await u.delete()
-                    return []
+                    return
                 else:
                     uploaded.append(emote)
 
             asyncio.create_task(self.ensure_space())
-            return uploaded
+
+            if replacement_table:
+                replacement_table[name] = uploaded
 
     async def ensure_space(self):
         num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
@@ -462,13 +463,17 @@ class Emoter(commands.Cog):
             else:
                 search_in_db.append(word)
 
+        replacements = {}
+        upload_tasks = []
         if search_in_db:
             async for doc in self.emotes.find({'_id': {'$in': search_in_db}}):
                 name, url = doc['_id'], doc['url']
-                emotes = await self.cache.upload_emote(name, url)  # TODO: asyncio.gather instead
-                if emotes:
-                    content = content.replace(f'${name}', ''.join(str(e) for e in emotes))
-                    content_changed = True
+                upload_tasks.append(self.cache.upload_emote(name, url, replacements))
+
+        await asyncio.gather(*upload_tasks)
+        for word, emotes in replacements:
+            content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
+            content_changed = True
 
         if content_changed:
             try:
