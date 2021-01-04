@@ -19,6 +19,7 @@ from discord.utils import escape_markdown as nomd
 EMOTE_PATTERN = re.compile(r'\$([a-zA-Z0-9]+)')
 PARTIAL_CACHED_EMOTE = re.compile(r'(.*)~\d+$')
 INVISIBLE_CHAR = '\u17B5'
+EMOTE_SIZE_LIMIT = 262144
 
 
 class DatabaseEmote(TypedDict):
@@ -60,21 +61,33 @@ class BttvFetcher(ApiFetcher):
 
         print(f'[BTTV] Beggining fetch')
 
-        for section, url in self.urls.items():
+        for section, api_url in self.urls.items():
             for i in range(0, 100):
                 bulk = []
                 self.params['offset'] = i * 100
-                async with self.session.get(url, params=self.params) as r:
+                async with self.session.get(api_url, params=self.params) as r:
+
                     data = await r.json()
                     for e in data:
-                        bulk.append(
-                            InsertOne({
-                                '_id': e['emote']['code'],
-                                'src': 'bttv',
-                                'url': f'https://cdn.betterttv.net/emote/{e["emote"]["id"]}/2x',
-                                'animated': e['emote']['imageType'] == 'gif'
-                            })
-                        )
+
+                        id_ = e["emote"]["id"]
+                        name = e['emote']['code']
+                        animated = e['emote']['imageType'] == 'gif'
+                        url = f'https://cdn.betterttv.net/emote/{id_}/2x'
+
+                        if animated:
+                            # Check if the standard emote is too big for discord
+                            async with self.session.get(
+                                    'https://cdn.betterttv.net/emote/5f1b0186cf6d2144653d2970/2x') as r2:
+                                if len(await r2.read()) > EMOTE_SIZE_LIMIT:
+                                    # If it is, try using a smaller version
+                                    url = f'https://cdn.betterttv.net/emote/{id_}/1x'
+                                    async with self.session.get(url) as r3:
+                                        if len(await r3.read()) > EMOTE_SIZE_LIMIT:
+                                            # If it's still too big, use the static version
+                                            url = f'https://cache.ffzap.com/https://cdn.betterttv.net/emote/{id_}/2x'
+
+                        bulk.append(InsertOne({'_id': name, 'src': 'bttv', 'url': url, 'animated': animated}))
 
                     if bulk:
                         try:
@@ -163,8 +176,7 @@ class EmoteCollectionUpdater(commands.Cog):
         logging.debug('Begin emote update..')
         success = False
         try:
-            await self.emotes.delete_many({'src': {'$ne': 'user'}})
-            print('deleted existing')
+            await self.emotes.delete_many({'src': {'$in': ['bttv', 'ffz']}})
             await self.bttv.fetch()
             await self.ffz.fetch()
         except Exception as e:
@@ -468,7 +480,7 @@ class Emoter(commands.Cog):
         if search_in_db:
             async for doc in self.emotes.find({'_id': {'$in': search_in_db}}):
                 name, url = doc['_id'], doc['url']
-                upload_tasks.append(self.cache.upload_emote(name, url, replacements))
+                upload_tasks.append(asyncio.create_task(self.cache.upload_emote(name, url, replacements)))
 
         await asyncio.gather(*upload_tasks)
         for word, emotes in replacements:
