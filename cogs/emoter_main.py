@@ -274,7 +274,7 @@ class Cache:
 
             return slices
 
-    async def upload_emote(self, name: str, url: str, replacement_table=None):
+    async def upload_emote(self, name: str, url: str, replacement_table: dict):
 
         # TODO: Don't prefix single-image emotes
         async with self.session.get(url) as response:
@@ -295,10 +295,10 @@ class Cache:
                 else:
                     uploaded.append(emote)
 
-            asyncio.create_task(self.ensure_space())
-
-            if replacement_table:
+            if uploaded:
                 replacement_table[name] = uploaded
+
+            asyncio.create_task(self.ensure_space())
 
     async def ensure_space(self):
         num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
@@ -474,17 +474,15 @@ class Emoter(commands.Cog):
             else:
                 search_in_db.append(word)
 
-        replacements = {}
-        upload_tasks = []
         if search_in_db:
+            replacements = {}
             async for doc in self.emotes.find({'_id': {'$in': search_in_db}}):
                 name, url = doc['_id'], doc['url']
-                upload_tasks.append(asyncio.create_task(self.cache.upload_emote(name, url, replacements)))
+                await self.cache.upload_emote(name, url, replacements)
 
-        await asyncio.gather(*upload_tasks)
-        for word, emotes in replacements:
-            content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
-            content_changed = True
+            for word, emotes in replacements.items():
+                content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
+                content_changed = True
 
         if content_changed:
             try:
