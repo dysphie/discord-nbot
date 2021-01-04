@@ -17,7 +17,7 @@ from pymongo import InsertOne, UpdateOne
 from pymongo.errors import DuplicateKeyError, BulkWriteError
 from discord.utils import escape_markdown as nomd
 
-EMOTE_PATTERN = re.compile(r'\$([^\s$]+)')
+EMOTE_PATTERN = re.compile(r'\$([a-zA-Z0-9]+)')
 PARTIAL_CACHED_EMOTE = re.compile(r'(.*)~\d+$')
 INVISIBLE_CHAR = '\u17B5'
 
@@ -443,32 +443,34 @@ class Emoter(commands.Cog):
     @commands.guild_only()
     async def on_message(self, message):
 
-        # TODO: This has grown into a mess..
-        #  Weed out data structs, optimize, use tasks instead of queued awaits
-
         if message.author.bot:
             return
 
         content = message.content
-        prefixed = list(set(EMOTE_PATTERN.findall(content)))
-        prefixed.sort(key=len, reverse=True)
+        prefixed = set(EMOTE_PATTERN.findall(content))
         if not prefixed:
             return
 
-        for i, p in enumerate(list(prefixed)):
-            emotes = self.cache.get(p)
-            if emotes:
-                content = content.replace(f'${p}', ''.join(str(e) for e in emotes))
-                del prefixed[i]
+        content_changed = False
+        search_in_db = []
 
-        if prefixed:
-            async for doc in self.emotes.find({'_id': {'$in': prefixed}}):
+        for word in prefixed:
+            emotes = self.cache.get(word)
+            if emotes:
+                content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
+                content_changed = True
+            else:
+                search_in_db.append(word)
+
+        if search_in_db:
+            async for doc in self.emotes.find({'_id': {'$in': search_in_db}}):
                 name, url = doc['_id'], doc['url']
-                emotes = await self.cache.upload_emote(name, url)
+                emotes = await self.cache.upload_emote(name, url)  # TODO: asyncio.gather instead
                 if emotes:
                     content = content.replace(f'${name}', ''.join(str(e) for e in emotes))
+                    content_changed = True
 
-        if content != message.content:  # Optimize?
+        if content_changed:
             try:
                 await self.send_as_user(message.author, content, message.channel)
             except Exception as e:
