@@ -77,8 +77,7 @@ class BttvFetcher(ApiFetcher):
 
                         if animated:
                             # Check if the standard emote is too big for discord
-                            async with self.session.get(
-                                    'https://cdn.betterttv.net/emote/5f1b0186cf6d2144653d2970/2x') as r2:
+                            async with self.session.get(f'https://cdn.betterttv.net/emote/{id_}') as r2:
                                 if len(await r2.read()) > EMOTE_SIZE_LIMIT:
                                     # If it is, try using a smaller version
                                     url = f'https://cdn.betterttv.net/emote/{id_}/1x'
