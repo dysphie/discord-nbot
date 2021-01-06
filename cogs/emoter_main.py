@@ -205,6 +205,7 @@ class Cache:
     async def evict(self, count: int):
         deleted = 0
         for emote in sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=False):
+            print(f'Decided to evict {emote.name}')
             deleted += await self.delete(emote.name)
             if deleted >= count:
                 break
@@ -222,57 +223,40 @@ class Cache:
     @staticmethod
     def preprocess_emote(img_bytes: bytes) -> List[bytes]:
 
-        # TODO: Width should be rounded to the closest multiplier of 48
-        #  Current implementation creates ghost emote (empty)
-        slot_max = 48
+        MIN_HEIGHT = 48
+        MIN_WIDTH = 48
+        MAX_WIDTH = MIN_WIDTH * 3
+
+        cells = []
         with Image.open(BytesIO(img_bytes)) as img:
-            cur_width, cur_height = img.size
-            # Don't act on GIFs or properly sized emotes
-            if (cur_width <= slot_max and cur_height <= slot_max) or img.is_animated:
-                return [img_bytes]
 
-            # Set max height to 48px, scale width accordingly
-            new_height = slot_max
-            new_width = int(new_height * cur_width / cur_height)
+            # Resize and pad with transparency
+            img.thumbnail((MAX_WIDTH, MIN_HEIGHT))
+            num_slices = round(img.size[0] / MIN_WIDTH)
 
-            # Calculate how many emote slots the image would occupy
-            num_slots = new_width / slot_max
-
-            # If the image would barely occupy the last slot, scale down by one
-            if num_slots > 1 and num_slots % 1 < 0.4:
-                final_width = new_width - (new_width % slot_max)
-                # And finally scale the height based on the rounded down width
-                final_height = int(final_width * new_height / new_width)
-                num_slots -= 1
-            else:
-                final_width = new_width
-                final_height = new_height
-
-            num_slots = math.ceil(num_slots)
-
-            # Perform actual resize operation
-            img = img.resize((final_width, final_height))
-
-            # If the emote is single-image, we are done, return bytes
-            if num_slots == 1:
+            # Skip padding for single-cell emotes, not worth it
+            if num_slices == 1:
                 with BytesIO() as io:
                     img.save(io, 'PNG')
                     io.seek(0)
-                    return [io.read()]
+                    cells = [io.read()]
+            else:
+                bg_width = MIN_WIDTH * num_slices
+                bg = Image.new('RGBA', (bg_width, MIN_HEIGHT), (255, 255, 255, 0))
+                bg.paste(img)
 
-            # Else slice..
-            slices = []
-            for i in range(num_slots):
-                left = i * slot_max
-                right = left + slot_max
-                bbox = (left, 0, right, final_height)
-                slice_ = img.crop(bbox)
-                with BytesIO() as io:
-                    slice_.save(io, 'PNG')
-                    io.seek(0)
-                    slices.append(io.read())
+                # Chop it up
+                for i in range(num_slices):
+                    left = i * MIN_WIDTH
+                    right = left + MIN_WIDTH
+                    bbox = (left, 0, right, MIN_HEIGHT)
+                    cell = img.crop(bbox)
+                    with BytesIO() as io:
+                        cell.save(io, 'PNG')
+                        io.seek(0)
+                        cells.append(io.read())
 
-            return slices
+        return cells
 
     async def upload_emote(self, name: str, url: str, replacement_table: dict):
 
