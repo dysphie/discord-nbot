@@ -199,19 +199,16 @@ class Cache:
         # Ensure a BUFFER_SIZE gap between new insertions and deletions
         asyncio.create_task(self.ensure_space())
 
-    def get(self, name: str) -> List[Emoji]:
+    def get_emote(self, name: str) -> List[Emoji]:
         return [e for e in self.guild.emojis if re.match(fr'{re.escape(name)}(_\d+)?$', e.name)]
 
-    async def evict(self, count: int):
-        deleted = 0
-        for emote in sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=False):
-            print(f'Decided to evict {emote.name}')
-            deleted += await self.delete(emote.name)
-            if deleted >= count:
-                break
+    def evict_emotes(self, count: int):
+        tail = sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=False)[:count]
+        for emote in tail:
+            asyncio.create_task(self.delete_emote(emote.name))
 
-    async def delete(self, name: str) -> int:
-        emotes = self.get(name)
+    async def delete_emote(self, name: str) -> int:
+        emotes = self.get_emote(name)
         for emote in emotes:
             await emote.delete()
         return len(emotes)
@@ -277,7 +274,7 @@ class Cache:
                     emote = await self.guild.create_custom_emoji(name=f'{name}_{i}', image=slice_)
                 except Exception:  # If a slice fails, all slices must fail
                     for u in uploaded:
-                        await u.delete()
+                        asyncio.create_task(u.delete())
                     return
                 else:
                     uploaded.append(emote)
@@ -290,7 +287,7 @@ class Cache:
     async def ensure_space(self):
         num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
         if num_to_evict > 0:
-            await self.evict(num_to_evict)
+            self.evict_emotes(num_to_evict)
 
     # def build_lookup_table(self):
     #     replacements = {}
@@ -454,7 +451,7 @@ class Emoter(commands.Cog):
         search_in_db = []
 
         for word in prefixed:
-            emotes = self.cache.get(word)
+            emotes = self.cache.get_emote(word)
             if emotes:
                 content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
                 content_changed = True
