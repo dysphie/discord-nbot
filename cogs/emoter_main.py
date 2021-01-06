@@ -227,8 +227,10 @@ class Cache:
         MIN_WIDTH = 48
         MAX_WIDTH = MIN_WIDTH * 3
 
-        cells = []
         with Image.open(BytesIO(img_bytes)) as img:
+
+            if img.is_animated:
+                return [img_bytes]
 
             # Resize and pad with transparency
             img.thumbnail((MAX_WIDTH, MIN_HEIGHT))
@@ -239,8 +241,9 @@ class Cache:
                 with BytesIO() as io:
                     img.save(io, 'PNG')
                     io.seek(0)
-                    cells = [io.read()]
+                    return [io.read()]
             else:
+                cells = []
                 bg_width = MIN_WIDTH * num_slices
                 bg = Image.new('RGBA', (bg_width, MIN_HEIGHT), (255, 255, 255, 0))
                 bg.paste(img)
@@ -256,7 +259,7 @@ class Cache:
                         io.seek(0)
                         cells.append(io.read())
 
-        return cells
+                return cells
 
     async def upload_emote(self, name: str, url: str, replacement_table: dict):
 
