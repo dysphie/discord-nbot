@@ -10,3 +10,5 @@ aiogoogletrans
 numpy
 Pillow
 arrow
+beautifulsoup4
+nltk
