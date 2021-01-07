@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import math
 import re
 from abc import abstractmethod
 from datetime import datetime
@@ -9,7 +8,6 @@ from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
-from discord import Emoji
 from discord.ext import commands, tasks
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import InsertOne, UpdateOne
@@ -20,6 +18,20 @@ EMOTE_PATTERN = re.compile(r'\$([a-zA-Z0-9]+)')
 PARTIAL_CACHED_EMOTE = re.compile(r'(.*)~\d+$')
 INVISIBLE_CHAR = '\u17B5'
 EMOTE_SIZE_LIMIT = 262144
+
+
+class CacheEmote:
+
+    def __init__(self, name):
+        self.name = name
+        self.chunks = []
+
+    async def delete(self):
+        delete_tasks = [asyncio.create_task(chunk.delete()) for chunk in self.chunks]
+        await asyncio.gather(*delete_tasks)
+
+    def to_string(self):  # TODO: figure out why overriding __str__ doesn't work
+        return ''.join(str(e) for e in self.chunks)
 
 
 class DatabaseEmote(TypedDict):
@@ -190,6 +202,7 @@ class EmoteCollectionUpdater(commands.Cog):
 
 
 class Cache:
+
     BUFFER_SIZE = 8
 
     def __init__(self, guild, session):
@@ -199,19 +212,22 @@ class Cache:
         # Ensure a BUFFER_SIZE gap between new insertions and deletions
         asyncio.create_task(self.ensure_space())
 
-    def get_emote(self, name: str) -> List[Emoji]:
-        return [e for e in self.guild.emojis if re.match(fr'{re.escape(name)}(_\d+)?$', e.name)]
+    def get_emote(self, name: str) -> CacheEmote:
+        chunks = [e for e in self.guild.emojis if re.match(fr'{re.escape(name)}(_\d+)?$', e.name)]
+        if chunks:
+            emote = CacheEmote(name)
+            emote.chunks = chunks
+            return emote
 
-    def evict_emotes(self, count: int):
+    async def evict_emotes(self, count: int):
         tail = sorted(self.guild.emojis, key=lambda e: e.created_at, reverse=False)[:count]
-        for emote in tail:
-            asyncio.create_task(self.delete_emote(emote.name))
+        delete_tasks = [asyncio.create_task(self.delete_emote(e.name)) for e in tail]
+        await asyncio.gather(*delete_tasks)
 
-    async def delete_emote(self, name: str) -> int:
-        emotes = self.get_emote(name)
-        for emote in emotes:
+    async def delete_emote(self, name: str):
+        emote = self.get_emote(name)
+        if emote:
             await emote.delete()
-        return len(emotes)
 
     async def purge(self):
         for emote in self.guild.emojis:
@@ -258,53 +274,40 @@ class Cache:
 
                 return cells
 
-    async def upload_emote(self, name: str, url: str, replacement_table: dict):
+    async def upload_emote(self, name: str, url: str) -> Optional[CacheEmote]:
 
-        # TODO: Don't prefix single-image emotes
         async with self.session.get(url) as response:
             if response.status != 200:
                 return
-
             img = await response.read()
-            sliced_imgs = self.preprocess_emote(img)
 
-            uploaded = []
-            for i, slice_ in enumerate(sliced_imgs):
-                try:
-                    emote = await self.guild.create_custom_emoji(name=f'{name}_{i}', image=slice_)
-                except Exception:  # If a slice fails, all slices must fail
-                    for u in uploaded:
-                        asyncio.create_task(u.delete())
-                    return
-                else:
-                    uploaded.append(emote)
+        sliced_imgs = self.preprocess_emote(img)
 
-            if uploaded:
-                replacement_table[name] = uploaded
+        upload_tasks = [
+            asyncio.create_task(self.guild.create_custom_emoji(
+                name=f"{name}_{i}", image=slice_)
+            )
+            for i, slice_ in enumerate(sliced_imgs)
+        ]
 
+        big_emote = CacheEmote(name)
+
+        try:
+            uploaded = await asyncio.gather(*upload_tasks)
+        except discord.HTTPException:  # If one chunk fails to upload, cancel and undo the rest
+            for task in upload_tasks:
+                task.cancel()
+            for already_uploaded in big_emote.chunks:  # TODO: Single task for all of them?
+                asyncio.create_task(already_uploaded.delete())
+        else:
+            big_emote.chunks = uploaded
             asyncio.create_task(self.ensure_space())
+            return big_emote
 
     async def ensure_space(self):
         num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
         if num_to_evict > 0:
-            self.evict_emotes(num_to_evict)
-
-    # def build_lookup_table(self):
-    #     replacements = {}
-    #     partials = defaultdict(list)
-    #
-    #     for e in self.guild.emojis:
-    #         partial = PARTIAL_CACHED_EMOTE.search(e.name)
-    #         if partial:
-    #             partials[partial.group(1)].append(e)
-    #         else:
-    #             replacements[e.name] = str(e)
-    #
-    #     for namespace, emotes in partials.items():
-    #         emotes.sort(key=lambda x: int(''.join(filter(str.isdigit, x.name))))
-    #         replacements[namespace] = ''.join([str(e) for e in emotes])
-    #
-    #     self.lookup_table = replacements
+            await self.evict_emotes(num_to_evict)
 
     @property
     def used(self):
@@ -443,38 +446,46 @@ class Emoter(commands.Cog):
             return
 
         content = message.content
-        prefixed = set(EMOTE_PATTERN.findall(content))
-        if not prefixed:
+        search_in_cache = set(EMOTE_PATTERN.findall(content))
+        if not search_in_cache:
             return
 
-        content_changed = False
+        replacements = {}
         search_in_db = []
 
-        for word in prefixed:
-            emotes = self.cache.get_emote(word)
-            if emotes:
-                content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
-                content_changed = True
+        # Search for words in emote cache
+        for word in search_in_cache:
+            big_emote = self.cache.get_emote(word)
+            if big_emote:
+                replacements[word] = big_emote.to_string()
             else:
                 search_in_db.append(word)
 
+        # Search remaining words in database
         if search_in_db:
-            replacements = {}
+            upload_tasks = []
             async for doc in self.emotes.find({'_id': {'$in': search_in_db}}):
-                name, url = doc['_id'], doc['url']
-                await self.cache.upload_emote(name, url, replacements)
+                upload_task = asyncio.create_task(self.cache.upload_emote(doc['_id'], doc['url']))
+                upload_tasks.append(upload_task)
 
-            for word, emotes in replacements.items():
-                content = content.replace(f'${word}', ''.join(str(e) for e in emotes))
-                content_changed = True
+            big_emotes = await asyncio.gather(*upload_tasks)
+            for big_emote in big_emotes:
+                replacements[big_emote.name] = big_emote.to_string()
 
-        if content_changed:
-            try:
-                await self.send_as_user(message.author, content, message.channel)
-            except Exception as e:
-                logging.warning(e)
-            else:
-                await message.delete()
+        if not replacements:
+            return
+
+        # TODO: Sort keys by length so as to prevent substring replacement infighting
+
+        for word, replacement in replacements.items():
+            content = content.replace(f'${word}', replacement)
+
+        try:
+            await self.send_as_user(message.author, content, message.channel)
+        except Exception as e:
+            logging.warning(e)
+        else:
+            await message.delete()
 
     async def send_as_user(self, member, content, channel, wait=False):
 
