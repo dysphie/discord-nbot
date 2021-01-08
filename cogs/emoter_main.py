@@ -313,9 +313,11 @@ class Cache:
         to_delete = set()
 
         for emote_list in [static, animated]:
-            excess_count = self.BUFFER_SIZE - (self.max - len(emote_list))
+            excess_count = len(emote_list) - (self.max - self.BUFFER_SIZE)
+            if excess_count < 1:
+                continue
+                
             excess_emotes = sorted(emote_list, key=lambda e: e.created_at)[:excess_count]
-
             for excess_emote in excess_emotes:
                 if excess_emote not in to_delete:
                     big_emote = self.get_emote(excess_emote.name)
