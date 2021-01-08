@@ -305,9 +305,26 @@ class Cache:
             return big_emote
 
     async def ensure_space(self):
-        num_to_evict = self.BUFFER_SIZE - (self.max - self.used)
-        if num_to_evict > 0:
-            await self.evict_emotes(num_to_evict)
+
+        static, animated = [], []
+        for emote in self.guild.emojis:
+            (static, animated)[emote.animated].append(emote)
+
+        to_delete = set()
+
+        for emote_list in [static, animated]:
+            excess_count = self.BUFFER_SIZE - (self.max - len(emote_list))
+            excess_emotes = sorted(emote_list, key=lambda e: e.created_at)[:excess_count]
+
+            for excess_emote in excess_emotes:
+                if excess_emote not in to_delete:
+                    big_emote = self.get_emote(excess_emote.name)
+                    if big_emote:
+                        for chunk in big_emote.chunks:
+                            to_delete.add(chunk)
+
+        delete_tasks = [asyncio.create_task(d.delete()) for d in to_delete]
+        await asyncio.gather(*delete_tasks)
 
     @property
     def used(self):
