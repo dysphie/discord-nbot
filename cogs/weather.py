@@ -103,7 +103,7 @@ class Weather(commands.Cog):
         querystring = {"apikey": self.api_key}
         headers = {"Content-Type": "application/json"}
         payload = {
-            "fields": ["temperatureApparent", "humidity", "windSpeed", "weatherCode", "sunsetTime", "sunriseTime"],
+            "fields": ["temperature", "humidity", "windSpeed", "weatherCode", "sunsetTime", "sunriseTime"],
             "timesteps": ["1h", "1d"],
             "location": f"{latitude}, {longitude}"
         }
@@ -141,7 +141,7 @@ class Weather(commands.Cog):
                     hours_from_now = arrow.get(time).humanize()
                     forecast_field += f'{weather_icon} **{round(temp)}**°C / **{round(temp_f)}**°F - {hours_from_now}\n'
 
-            embed = discord.Embed(description=f'Boobies', color=0x7fffd4)
+            embed = discord.Embed(color=0x7fffd4)
             embed.add_field(inline=True, name='Now', value=now_field)
             embed.add_field(inline=True, name='Forecast', value=forecast_field)
             embed.set_footer(text=address)
