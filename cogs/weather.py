@@ -122,7 +122,7 @@ class Weather(commands.Cog):
             hour_gap = 2
             for i in range(0, num_rows * hour_gap, hour_gap):
 
-                temp = data['data']['timelines'][0]['intervals'][i]['values']['temperatureApparent']
+                temp = data['data']['timelines'][0]['intervals'][i]['values']['temperature']
                 temp_f = self.celsius_to_fahrenheit(temp)
                 weather_code = data['data']['timelines'][0]['intervals'][i]['values']['weatherCode']
                 time = data['data']['timelines'][0]['intervals'][i]['startTime']
