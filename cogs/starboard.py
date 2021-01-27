@@ -1,6 +1,6 @@
-from discord import Embed
+import textwrap
+import discord
 from discord.ext import commands
-
 
 class Starboard(commands.Cog):
 
@@ -33,24 +33,31 @@ class Starboard(commands.Cog):
         if message:
             await self.star_message(message)
 
-    async def star_message(self, message):
+    async def star_message(self, message: discord.Message):
 
-        embed = Embed(description=message.content)
-        embed.set_author(name='Content', url=message.jump_url)
-        embed.add_field(name='Author', value=message.author.mention)
-        embed.add_field(name='Channel', value=message.channel.mention)
-        embed.set_footer(text='1 gay bean')
-        starred = await self.starchannel.send(embed=embed)
+        username = message.author.display_name.ljust(2, '\u17B5')
+
+        webhooks = await self.starchannel.webhooks()
+        webhook = discord.utils.find(lambda m: m.user.id == self.bot.user.id, webhooks)
+        if not webhook:
+            webhook = await self.starchannel.create_webhook(name='Starboard')
+
+        starred = await webhook.send(
+            username=username,
+            content=textwrap.shorten(message.content, width=2000, placeholder=" .."),
+            files=[await a.to_file() for a in message.attachments],
+            avatar_url=message.author.avatar_url,
+            embed=discord.Embed(
+                description=f'⭐ **1** - [Original]({message.jump_url})',
+                color=0xFFAC33),
+            wait=True
+        )
 
         await self.stardb.insert_one({'_id': message.id, 'star_id': starred.id})
 
     @staticmethod
-    async def increase_reactions(starred):
-        embedict = starred.embeds[0].copy().to_dict()
-        print(embedict)
-        embedict['footer']['text'] = 'many gay bean'
-        embed = Embed.from_dict(embedict)
-        await starred.edit(embed=embed)
+    async def increase_reactions(starred: discord.Message):
+        pass # TODO
 
     # TODO: reaction remove
 
