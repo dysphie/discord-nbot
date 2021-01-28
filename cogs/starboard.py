@@ -14,7 +14,7 @@ class Starboard(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.starchannel = self.bot.get_channel(785664000532545536)
+        self.starchannel = self.bot.get_channel(self.bot.cfg['starboard_channel'])
         if not self.starchannel:
             raise Exception('Invalid starboard channel')
 
