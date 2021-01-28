@@ -1,6 +1,9 @@
 import textwrap
-import discord
+from discord import RawReactionActionEvent, Message, Embed, utils, NotFound, Forbidden, HTTPException
 from discord.ext import commands
+
+STAR_EMOJI = '⭐'
+
 
 class Starboard(commands.Cog):
 
@@ -11,55 +14,75 @@ class Starboard(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.starchannel = self.bot.get_channel(self.bot.cfg['starboard_channel'])
+        self.starchannel = self.bot.get_channel(785664000532545536)
+        if not self.starchannel:
+            raise Exception('Invalid starboard channel')
 
     @commands.Cog.listener()
     @commands.guild_only()
-    async def on_raw_reaction_add(self, payload):
+    async def on_raw_reaction_add(self, payload: RawReactionActionEvent):
+        await self.on_raw_reaction_event(payload)
 
-        if self.starchannel is None or str(payload.emoji) != '⭐':
+    @commands.Cog.listener()
+    @commands.guild_only()
+    async def on_raw_reaction_remove(self, payload: RawReactionActionEvent):
+        await self.on_raw_reaction_event(payload)
+
+    async def on_raw_reaction_event(self, payload: RawReactionActionEvent):
+
+        if str(payload.emoji) != STAR_EMOJI:
             return
 
         channel = await self.bot.fetch_channel(payload.channel_id)
+        original = await channel.fetch_message(payload.message_id)
 
-        starred_data = await self.stardb.find_one({'_id': payload.message_id})
-        if starred_data:
-            starred = await self.starchannel.fetch_message(starred_data['star_id'])
-            if starred:
-                await self.increase_reactions(starred)
+        if original.author.id == payload.user_id:  # No self starring!
             return
 
-        message = await channel.fetch_message(payload.message_id)
-        if message:
-            await self.star_message(message)
+        already_starred = await self.stardb.find_one({'_id': payload.message_id})
+        if already_starred:
+            try:
+                starred = await self.starchannel.fetch_message(already_starred['star_id'])
+            except (NotFound, Forbidden, HTTPException):
+                pass
+            else:
+                await self.update_starred(starred, original)
+        else:
+            await self.star_message(original)
 
-    async def star_message(self, message: discord.Message):
+    async def star_message(self, original: Message):
 
-        username = message.author.display_name.ljust(2, '\u17B5')
-
-        webhooks = await self.starchannel.webhooks()
-        webhook = discord.utils.find(lambda m: m.user.id == self.bot.user.id, webhooks)
-        if not webhook:
-            webhook = await self.starchannel.create_webhook(name='Starboard')
-
-        starred = await webhook.send(
-            username=username,
-            content=textwrap.shorten(message.content, width=2000, placeholder=" .."),
-            files=[await a.to_file() for a in message.attachments],
-            avatar_url=message.author.avatar_url,
-            embed=discord.Embed(
-                description=f'⭐ **1** - [Original]({message.jump_url})',
-                color=0xFFAC33),
-            wait=True
+        # Find suitable webhook transport
+        starred = await self.starchannel.send(
+            reference=original,
+            mention_author=False,
+            content=self.generate_star_stats(original)
         )
 
-        await self.stardb.insert_one({'_id': message.id, 'star_id': starred.id})
+        if starred:
+            await self.stardb.insert_one({'_id': original.id, 'star_id': starred.id})
+
+    async def update_starred(self, starred: Message, original: Message):
+
+        num_stars = self.count_stars(original)
+        print(num_stars)
+        if num_stars <= 0:
+            await starred.delete()
+            await self.stardb.delete_one({'_id': original.id})
+        else:
+            new_content = self.generate_star_stats(original, stars_override=num_stars)
+            await starred.edit(content=new_content)
+
+    def generate_star_stats(self, message: Message, stars_override=None) -> str:
+        num_stars = stars_override or self.count_stars(message)
+        return f'⭐ **{num_stars}**'
 
     @staticmethod
-    async def increase_reactions(starred: discord.Message):
-        pass # TODO
-
-    # TODO: reaction remove
+    def count_stars(message: Message):
+        for reaction in message.reactions:
+            if reaction.emoji == STAR_EMOJI:
+                return reaction.count
+        return 0
 
 
 def setup(bot):
