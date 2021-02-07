@@ -106,7 +106,9 @@ class BttvFetcher(ApiFetcher):
                         except BulkWriteError as bwe:
                             num_inserted = bwe.details['nInserted']
                         else:
-                            num_inserted = len(result.inserted_ids)
+                            # HACKHACK: result.inserted_ids is failing, assume the max got inserted
+                            num_inserted = 100
+                            # num_inserted = len(result.inserted_ids)
                         finally:
                             print(f'[BTTV] Inserted {num_inserted}')
 
@@ -152,6 +154,8 @@ class FfzFetcher(ApiFetcher):
                 else:
                     num_inserted = len(result.inserted_ids)
                 finally:
+                    # HACKHACK: result.inserted_ids is failing, assume the max got inserted
+                    num_inserted = 200
                     print(f'[FFZ] Inserted {num_inserted}')
 
             self.params['page'] += 1
