@@ -74,7 +74,7 @@ class BttvFetcher(ApiFetcher):
         print(f'[BTTV] Beggining fetch')
 
         for section, api_url in self.urls.items():
-            for i in range(0, 100):
+            for i in range(0, 300):
                 bulk = []
                 self.params['offset'] = i * 100
                 async with self.session.get(api_url, params=self.params) as r:
@@ -127,7 +127,7 @@ class FfzFetcher(ApiFetcher):
 
         print(f'[FFZ] Beggining fetch')
 
-        while self.params['page'] <= 50:
+        while self.params['page'] <= 200:
             async with self.session.get(self.url, params=self.params) as r:
                 data = await r.json()
                 bulk = []
