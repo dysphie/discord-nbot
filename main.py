@@ -57,6 +57,15 @@ class DiscordBot(commands.Bot):
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
+    
+    async def on_command_error(self, ctx, error):
+        pass
+
+    async def on_message(self, message):
+        if message.author.bot or not message.guild:
+            return
+        await self.process_commands(message)
+
 
     def load_extensions(self):
         for file in Path('cogs').glob('**/*.py'):
