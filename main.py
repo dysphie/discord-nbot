@@ -61,6 +61,7 @@ class DiscordBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         pass
 
+    @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot or not message.guild:
             return
