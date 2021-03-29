@@ -1,6 +1,8 @@
-from io import BytesIO
+import io
+
 import discord
 from discord.ext import commands
+
 
 class Inspire(commands.Cog, name="Inspire"):
 
@@ -11,13 +13,11 @@ class Inspire(commands.Cog, name="Inspire"):
     @commands.command()
     async def inspire(self, ctx):
         async with self.session.get('https://inspirobot.me/api?generate=true') as r:
-            if r.status != 200:
-                return await ctx.error('Could not fetch file...')
 
-            img_url = await r.text()
-            embed = discord.Embed(color=0x7fffd4)
-            embed.set_image(url=img_url)
-            await ctx.send(embed=embed)
+            quote_url = await r.text()
+            async with self.session.get(quote_url) as r2:
+                data = io.BytesIO(await r2.read())
+                await ctx.send(file=discord.File(data, 'quote.png'))
 
 
 def setup(bot):

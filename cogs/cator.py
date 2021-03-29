@@ -1,6 +1,8 @@
+import io
+from random import choice, randint
+
 import discord
 from discord.ext import commands
-from bs4 import BeautifulSoup
 
 
 class Cator(commands.Cog, name="Cator"):
@@ -13,17 +15,14 @@ class Cator(commands.Cog, name="Cator"):
 
     @commands.command()
     async def cat(self, ctx):
-        async with self.session.get(url) as r:
-            if r.status != 200:
-                return await ctx.error('Could not fetch file...')
 
-            text = await resp.read()
-            soup = BeautifulSoup(text.decode('utf-8'), 'html5lib')
-            img_url = soup.find("img", {"id": "1"})['src']
+        folder = choice(['04', '05', '06'])
+        catnum = randint(0, 5000)
 
-            embed = discord.Embed(color=0x7fffd4)
-            embed.set_image(url=img_url)
-            await ctx.send(embed=embed)
+        cat_url = f'https://d2ph5fj80uercy.cloudfront.net/{folder}/cat{catnum}.jpg'
+        async with self.session.get(cat_url) as resp:
+            data = io.BytesIO(await resp.read())
+            await ctx.send(file=discord.File(data, 'cat.png'))
 
 
 def setup(bot):
