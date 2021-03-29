@@ -12,3 +12,4 @@ Pillow
 arrow
 beautifulsoup4
 nltk
+discord-py-slash-command

@@ -7,6 +7,7 @@ from os import environ
 import sys
 import traceback
 from pathlib import Path
+from discord_slash import SlashCommand
 
 intents = discord.Intents.default()
 intents.members = True
@@ -39,16 +40,12 @@ class DiscordBot(commands.Bot):
             intents=intents,
             allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=False)
         )
+
         self.db = motor.motor_asyncio.AsyncIOMotorClient(environ['NBOT_DB_URI'])['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
-        self.task = self.loop.create_task(self.__ainit__())
-
-    async def __ainit__(self):
         self.session = aiohttp.ClientSession(loop=self.loop)
-        self.load_extensions()
 
     def cog_unload(self):
-        self.task.cancel()
         self.session.close()
 
     @commands.Cog.listener()
@@ -57,7 +54,7 @@ class DiscordBot(commands.Bot):
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
-    
+
     async def on_command_error(self, ctx, error):
         pass
 
@@ -66,7 +63,6 @@ class DiscordBot(commands.Bot):
         if message.author.bot or not message.guild:
             return
         await self.process_commands(message)
-
 
     def load_extensions(self):
         for file in Path('cogs').glob('**/*.py'):
@@ -80,4 +76,7 @@ class DiscordBot(commands.Bot):
 
 
 if __name__ == "__main__":
-    DiscordBot().run(environ['NBOT_TOKEN'])
+    bot = DiscordBot()
+    slash = SlashCommand(bot, sync_commands=True)
+    bot.load_extensions()
+    bot.run(environ['NBOT_TOKEN'], reconnect=True)

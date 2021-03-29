@@ -2,8 +2,11 @@ import aiohttp
 import discord
 from discord.ext import commands
 import os
+
+from discord_slash.utils.manage_commands import create_option
 from geopy.geocoders import Nominatim
 import arrow
+from discord_slash import cog_ext, SlashContext
 
 weather_codes = {
     "0": "Unknown",
@@ -76,10 +79,16 @@ class Weather(commands.Cog):
             print(f'Code not in weather_codes: {code}')
         return '🍌'  # no results return banan
 
-    @commands.command(aliases=['temp', 'w'])
-    async def weather(self, ctx, *, args=None):
+    @cog_ext.cog_slash(name="weather", description='Tells the weather', guild_ids=[336213135193145344], options=[
+                           create_option(
+                               name="location",
+                               description="Name of the location",
+                               option_type=3,
+                               required=False
+                           )])
+    async def weather(self, ctx, location: str):
 
-        if not args:
+        if not location:
             result = await self.locations.find_one({'_id': ctx.author.id})
             if not result:
                 await ctx.error('No location specified and no location saved')
@@ -90,14 +99,14 @@ class Weather(commands.Cog):
             address = result['addr']
 
         else:
-            location = self.geolocator.geocode(args)
-            if not location:
+            geoloc = self.geolocator.geocode(location)
+            if not geoloc:
                 await ctx.error('Unknown location')
                 return
 
-            latitude = location.latitude
-            longitude = location.longitude
-            address = location.address
+            latitude = geoloc.latitude
+            longitude = geoloc.longitude
+            address = geoloc.address
 
         url = "https://data.climacell.co/v4/timelines"
         querystring = {"apikey": self.api_key}
