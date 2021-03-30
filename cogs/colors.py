@@ -1,6 +1,8 @@
 import re
 import discord
 from discord.ext import commands
+from discord_slash import cog_ext, SlashCommandOptionType
+from discord_slash.utils.manage_commands import create_option
 
 
 def is_hex_color_code(s: str):
@@ -12,13 +14,18 @@ class Colors(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(aliases=['hex', 'colorme'])
-    @commands.guild_only()
-    @commands.bot_has_permissions(manage_roles=True)
+    @cog_ext.cog_slash(name="namecolor", description='Sets your name color',
+                       options=[
+                           create_option(
+                               name="hex_code",
+                               description="Hex code of the wanted color",
+                               option_type=SlashCommandOptionType.STRING,
+                               required=False
+                           )])
     async def color(self, ctx, hex_code):
 
         if not is_hex_color_code(hex_code):
-            await ctx.send("Invalid hex code. Usage: `/color 44ff00`.")
+            await ctx.send("Invalid hex code. Color format example: 44ff00`")
 
         # Make sure we have guild space
         guild = ctx.message.guild

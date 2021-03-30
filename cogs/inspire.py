@@ -2,6 +2,7 @@ import io
 
 import discord
 from discord.ext import commands
+from discord_slash import cog_ext
 
 
 class Inspire(commands.Cog, name="Inspire"):
@@ -10,7 +11,7 @@ class Inspire(commands.Cog, name="Inspire"):
         self.bot = bot
         self.session = bot.session
 
-    @commands.command()
+    @cog_ext.cog_slash(name="inspire", description='Posts an AI generated inspirational quote')
     async def inspire(self, ctx):
         async with self.session.get('https://inspirobot.me/api?generate=true') as r:
 

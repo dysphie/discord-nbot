@@ -8,6 +8,7 @@ import sys
 import traceback
 from pathlib import Path
 from discord_slash import SlashCommand
+from discord_slash.utils.manage_commands import remove_all_commands
 
 intents = discord.Intents.default()
 intents.members = True
@@ -51,6 +52,8 @@ class DiscordBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f'Logged in as {self.user.name} (ID: {self.user.id})')
+
+        # await remove_all_commands(self.user.id, environ['NBOT_TOKEN'], [719448049981849620])
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
