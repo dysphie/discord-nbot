@@ -11,7 +11,7 @@ class Cleaner(commands.Cog):
     def cog_unload(self):
         self.cleaner.cancel()
 
-    @tasks.loop(hours=1)
+    @tasks.loop(hours=12)
     async def cleaner(self):
         yday = datetime.utcnow() - timedelta(days=1)
 
