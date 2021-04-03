@@ -13,3 +13,5 @@ arrow
 beautifulsoup4
 nltk
 discord-py-slash-command @ git+https://github.com/eunwoo1104/discord-py-slash-command.git@80796084d23e90abfc602acda4821700f8a73185
+aiohttp
+gql==3.0.0a5
