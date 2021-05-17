@@ -1,4 +1,4 @@
-discord.py
+discord.py>=1.7.0
 dnspython
 geopy
 nltk
@@ -12,7 +12,7 @@ Pillow
 arrow
 beautifulsoup4
 nltk
-discord-py-slash-command @ git+https://github.com/eunwoo1104/discord-py-slash-command.git@80796084d23e90abfc602acda4821700f8a73185
+discord-py-slash-command
 aiohttp
 gql==3.0.0a5
 websockets
