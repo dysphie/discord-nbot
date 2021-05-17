@@ -39,6 +39,11 @@ class Starboard(commands.Cog):
         embed.set_author(name='Content', url=message.jump_url)
         embed.add_field(name='Author', value=message.author.mention)
         embed.add_field(name='Channel', value=message.channel.mention)
+
+        if len(message.attachments) > 0:
+            if 'image' in message.attachments[0].content_type:
+                embed.set_image(url=message.attachments[0].url)
+                
         embed.set_footer(text='1 gay bean')
         starred = await self.starchannel.send(embed=embed)
 
