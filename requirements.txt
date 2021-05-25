@@ -35,3 +35,4 @@ Unidecode==1.2.0
 webencodings==0.5.1
 websockets==8.1
 yarl==1.6.3
+openai
