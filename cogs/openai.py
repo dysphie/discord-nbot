@@ -11,7 +11,7 @@ class OpenAITest(commands.Cog, name="OpenAI Tests"):
         self.bot = bot
 
     @commands.command()
-    async def order(self, ctx, *, message):
+    async def instruct(self, ctx, *, message):
         response = openai.Completion.create(
             engine="davinci-instruct-beta",
             prompt=message,
