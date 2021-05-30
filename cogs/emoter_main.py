@@ -65,7 +65,8 @@ class ApiFetcher:
 class BttvFetcher(ApiFetcher):
     urls = {
         'trending': 'https://api.betterttv.net/3/emotes/shared/trending',
-        'shared': 'https://api.betterttv.net/3/emotes/shared/top'
+        'shared': 'https://api.betterttv.net/3/emotes/shared/top',
+        'global': 'https://api.betterttv.net/3/cached/emotes/global'
     }
     params = {'offset': 0, 'limit': 100}
 
