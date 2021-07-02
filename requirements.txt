@@ -1,5 +1,5 @@
 aiogoogletrans==3.3.2
-aiohttp==3.7.4.post0
+aiohttp>=3.7.4
 arrow==1.1.0
 async-timeout==3.0.1
 attrs==21.2.0
