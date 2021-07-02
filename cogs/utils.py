@@ -19,7 +19,7 @@ class Utils(commands.Cog):
         return webhook
 
 
-def truncate_string(s: str, maxlen: int, suffix='..'):
+def truncate_string(s: str, maxlen=2000, suffix='..'):
     return s[:maxlen - len(suffix)] + suffix if len(s) > maxlen else s
 
 

@@ -8,7 +8,6 @@ import sys
 import traceback
 from pathlib import Path
 from discord_slash import SlashCommand
-from discord_slash.utils.manage_commands import remove_all_commands
 
 intents = discord.Intents.default()
 intents.members = True
@@ -80,6 +79,6 @@ class DiscordBot(commands.Bot):
 
 if __name__ == "__main__":
     bot = DiscordBot()
-    slash = SlashCommand(bot, sync_commands=True)
+    slash = SlashCommand(bot, sync_commands=True, sync_on_cog_reload=True)
     bot.load_extensions()
     bot.run(environ['NBOT_TOKEN'], reconnect=True)
