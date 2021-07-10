@@ -49,7 +49,7 @@ class Twitter(commands.Cog, name="OpenAI"):
             embed.set_author(name=author_full, url=author_url)
             embed.set_footer(text=arrow.get(timestamp).humanize())
 
-            await ctx.send(url, embed=embed)
+            await ctx.send(embed=embed)
             await ctx.channel.send(url)
 
 
