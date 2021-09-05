@@ -45,8 +45,12 @@ class OpenAI(commands.Cog, name="OpenAI"):
         }
         async with self.session.post(URL, headers=HEADERS, json=json) as r:
             result = await r.json()
-            final = base + result['choices'][0]['text']
-            await ctx.send(truncate_string(final))
+            error = result.get('error')
+            if error:
+                await ctx.send(f"<:pepeLaugh:665663440014147616> {error['message']}")
+            else:
+                final = base + result['choices'][0]['text']
+                await ctx.send(truncate_string(final))
 
 
 def setup(bot):
