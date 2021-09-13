@@ -9,6 +9,8 @@ import discord
 from PIL import Image
 from aiohttp import ClientSession
 from discord.ext import commands, tasks
+from discord_slash import cog_ext, SlashCommandOptionType
+from discord_slash.utils.manage_commands import create_option
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import InsertOne, UpdateOne
 from pymongo.errors import DuplicateKeyError, BulkWriteError
@@ -380,6 +382,13 @@ class Emoter(commands.Cog):
     @emoter.group()
     async def cache(self, ctx):
         pass
+
+    @cog_ext.cog_slash(name="emote", description='Post a random emote from the database')
+    async def emote(self, ctx):
+        pipeline = [{'$sample': {'size': 1}}]
+        async for doc in self.emotes.aggregate(pipeline):
+            emote = await self.cache.upload_emote(doc['_id'], doc['url'])
+            await ctx.send(emote.to_string())
 
     @commands.max_concurrency(1)
     @commands.is_owner()
