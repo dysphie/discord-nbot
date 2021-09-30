@@ -13,8 +13,7 @@ class Colors(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @slash_command(name="namecolor", description='Sets your name color',
-                   guild_ids=[759525750201909319])
+    @slash_command(name="namecolor", description='Sets your name color')
     async def color(self,
                     ctx: ApplicationContext,
                     hex_code: Option(str, "Hex code")):
