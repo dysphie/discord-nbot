@@ -1,18 +1,13 @@
-color-role-prefix: '🎨'
+color-role-prefix: "🎨"
 weather-cleverbot-chance: 0.25
 game_updates_channel: 540868910166048779
 bot-prefix: '.'
-starboard_channel: 617539911528218634
+starboard_channel: 759525750768009228
 emote_storage_guild: 719448049981849620
 monitored_channels: [
-  336213135193145344, # general @ ncrew
-  540868910166048779, # games @ ncrew
-  359421509166563347, # anime @ ncrew
-  415807386771652608, # combat-arms @ ncrew
-  404050863318106142, # counter-strike @ ncrew
-  383353079833296896, # factorio @ ncrew
-  429831508497268736, # fortnite-br @ ncrew
-  359804979122274304, # league-of-legends @ ncrew
-  494864004271833088, # minecraft @ ncrew
-  383363395253960735, # overwatch @ ncrew
+  336213135193145344,
+  359421509166563347,
+  714889563549728809,
+  540868910166048779,
+  359804979122274304
 ]

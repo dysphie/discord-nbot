@@ -3,6 +3,7 @@ from typing import List
 import discord
 from discord.ext import tasks, commands
 
+
 class ChatArchiver(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -21,7 +22,7 @@ class ChatArchiver(commands.Cog):
                 await self.archive_channel(channel)
 
     async def archive_channel(self, channel: discord.TextChannel):
-        print(f'Archiving channel #{channel.name}...')
+        # print(f'Archiving channel #{channel.name}...')
 
         after = None
 
@@ -53,7 +54,10 @@ class ChatArchiver(commands.Cog):
 
             if to_save:
                 count += await self._insert_many(to_save)
-            print(f'Finished archiving #{channel.name}: {count} messages imported.')
+
+            if count > 0:
+                print(f'Saved {count} messages from #{channel.name}')
+
         except Exception as e:
             print(f'Something went wrong archiving #{channel.name}: {e}')
 

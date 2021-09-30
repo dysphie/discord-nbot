@@ -1,5 +1,7 @@
+import logging
+import os
+from abc import ABC
 import aiohttp
-import discord
 import motor.motor_asyncio
 import yaml
 from discord.ext import commands
@@ -7,10 +9,7 @@ from os import environ
 import sys
 import traceback
 from pathlib import Path
-from discord_slash import SlashCommand
-
-intents = discord.Intents.default()
-intents.members = True
+import discord
 
 
 class CustomContext(commands.Context):
@@ -32,18 +31,27 @@ class CustomContext(commands.Context):
         await self.send(embed=embed)
 
 
-class DiscordBot(commands.Bot):
+class DiscordBot(commands.Bot, ABC):
 
     def __init__(self):
         super().__init__(
             command_prefix='.',
-            intents=intents,
-            allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=False)
+            allowed_mentions=discord.AllowedMentions(everyone=False, users=False, roles=False),
+            intents=discord.Intents.all()
         )
 
+        self.logger = None
+        self.init_logger()
         self.db = motor.motor_asyncio.AsyncIOMotorClient(environ['NBOT_DB_URI'])['nbot']
         self.cfg = yaml.safe_load(open('config.yml'))
         self.session = aiohttp.ClientSession(loop=self.loop)
+
+    def init_logger(self):
+        self.logger = logging.getLogger('discord')
+        self.logger.setLevel(logging.INFO)
+        handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+        handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+        self.logger.addHandler(handler)
 
     def cog_unload(self):
         self.session.close()
@@ -51,8 +59,6 @@ class DiscordBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f'Logged in as {self.user.name} (ID: {self.user.id})')
-
-        # await remove_all_commands(self.user.id, environ['NBOT_TOKEN'], [719448049981849620])
 
     async def get_context(self, message, *, cls=CustomContext):
         return await super().get_context(message, cls=cls)
@@ -67,18 +73,18 @@ class DiscordBot(commands.Bot):
         await self.process_commands(message)
 
     def load_extensions(self):
-        for file in Path('cogs').glob('**/*.py'):
-            *tree, _ = file.parts
-            try:
-                self.load_extension(f"{'.'.join(tree)}.{file.stem}")
-            except Exception as e:
-                traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
-            else:
-                print(f'Loaded extension {file.stem}')
+        exts = os.listdir('./cogs')
+        for ext_name in exts:
+            if ext_name.endswith('.py'):
+                try:
+                    self.load_extension(f'cogs.{ext_name[:-3]}')
+                except Exception as e:
+                    print(e)
+                else:
+                    print(f'Loaded extension: {ext_name[:-3]}')
 
 
 if __name__ == "__main__":
     bot = DiscordBot()
-    slash = SlashCommand(bot, sync_commands=True, sync_on_cog_reload=True)
     bot.load_extensions()
     bot.run(environ['NBOT_TOKEN'], reconnect=True)

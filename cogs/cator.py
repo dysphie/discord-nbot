@@ -2,8 +2,8 @@ import io
 from random import choice, randint
 
 import discord
+from discord import slash_command
 from discord.ext import commands
-from discord_slash import cog_ext
 
 
 class Cator(commands.Cog, name="Cator"):
@@ -14,7 +14,7 @@ class Cator(commands.Cog, name="Cator"):
         self.bot = bot
         self.session = bot.session
 
-    @cog_ext.cog_slash(name="cat", description='Posts an AI generated picture of a cat')
+    @slash_command(name="cat", description='Posts an AI generated picture of a cat')
     async def cat(self, ctx):
 
         folder = choice(['04', '05', '06'])

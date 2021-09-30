@@ -1,13 +1,9 @@
-import aiohttp
 import discord
+from discord import Option, slash_command
 from discord.ext import commands
 import os
-from discord_slash.model import SlashCommandOptionType
-
-from discord_slash.utils.manage_commands import create_option
 from geopy.geocoders import Nominatim
 import arrow
-from discord_slash import cog_ext, SlashContext
 
 weather_codes = {
     "0": "Unknown",
@@ -80,16 +76,11 @@ class Weather(commands.Cog):
             print(f'Code not in weather_codes: {code}')
         return '🍌'  # no results return banan
 
-    @cog_ext.cog_slash(name="weather", description='Get weather at saved or specified location',
-                       options=[
-                           create_option(
-                               name="location",
-                               description="Full or partial location address",
-                               option_type=SlashCommandOptionType.STRING,
-                               required=False
-                           )])
-    async def weather(self, ctx, location: str = None):
-
+    @slash_command(name="weather", description='Get weather at saved or specified location')
+    async def weather(self,
+                      ctx,
+                      location: Option(str, "Location (country, city, address, etc)", required=False)
+                      ):
         if not location:
             result = await self.locations.find_one({'_id': ctx.author.id})
             if not result:

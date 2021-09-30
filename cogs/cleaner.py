@@ -1,5 +1,6 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from discord.ext import tasks, commands
+
 
 class Cleaner(commands.Cog):
 
@@ -23,6 +24,7 @@ class Cleaner(commands.Cog):
     @cleaner.before_loop
     async def before_cleaner(self):
         await self.bot.wait_until_ready()
+
 
 def setup(bot):
     bot.add_cog(Cleaner(bot))

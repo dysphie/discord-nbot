@@ -1,10 +1,7 @@
 import os
-from pprint import pprint
-
 import discord
+from discord import Option, slash_command
 from discord.ext import commands
-from discord_slash import SlashCommandOptionType, cog_ext, SlashContext
-from discord_slash.utils.manage_commands import create_option
 
 from cogs.utils import truncate_string
 
@@ -21,22 +18,12 @@ class OpenAI(commands.Cog, name="OpenAI"):
         self.bot = bot
         self.session = bot.session
 
-    @cog_ext.cog_slash(name="complete",
-                       description="Have the bot autocomplete this message.",
-                       options=[
-                           create_option(
-                               name="prompt",
-                               description="Text to autocomplete",
-                               option_type=SlashCommandOptionType.STRING,
-                               required=True
-                           )
-                       ]
-                       )
-    # @commands.command(aliases=['autocomplete', 'ac', 'imagine', 'prompt'])
-    async def complete(self, ctx: SlashContext, prompt: str = None):
+    @slash_command(name="complete", description="Have the bot autocomplete this message.")
+    async def complete(self,
+                       ctx,
+                       prompt: Option(str, "Text to autocomplete")):
 
         base = f'**{discord.utils.escape_markdown(prompt)}**'
-
         await ctx.defer()
         json = {
             'prompt': prompt,

@@ -8,9 +8,8 @@ from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
+from discord import slash_command, ApplicationContext
 from discord.ext import commands, tasks
-from discord_slash import cog_ext, SlashCommandOptionType
-from discord_slash.utils.manage_commands import create_option
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import InsertOne, UpdateOne
 from pymongo.errors import DuplicateKeyError, BulkWriteError
@@ -104,7 +103,7 @@ class BttvFetcher(ApiFetcher):
 
                     if bulk:
                         try:
-                            result = await self.collection.bulk_write(bulk, ordered=False)
+                            await self.collection.bulk_write(bulk, ordered=False)
                         except BulkWriteError as bwe:
                             num_inserted = bwe.details['nInserted']
                         else:
@@ -156,8 +155,7 @@ class FfzFetcher(ApiFetcher):
                 else:
                     num_inserted = len(result.inserted_ids)
                 finally:
-                    # HACKHACK: result.inserted_ids is failing, assume the max got inserted
-                    num_inserted = 200
+                    # FIXME: result.inserted_ids not accurate?
                     print(f'[FFZ] Inserted {num_inserted}')
 
             self.params['page'] += 1
@@ -383,12 +381,13 @@ class Emoter(commands.Cog):
     async def cache(self, ctx):
         pass
 
-    @cog_ext.cog_slash(name="emote", description='Post a random emote from the database')
-    async def emote(self, ctx):
+    @slash_command(name="emote", description='Post a random emote from the database')
+    async def emote(self, ctx: ApplicationContext):
+        print('/emote')
         pipeline = [{'$sample': {'size': 1}}]
         async for doc in self.emotes.aggregate(pipeline):
             emote = await self.cache.upload_emote(doc['_id'], doc['url'])
-            await ctx.send(emote.to_string())
+            await ctx.respond(emote.to_string())
 
     @commands.max_concurrency(1)
     @commands.is_owner()

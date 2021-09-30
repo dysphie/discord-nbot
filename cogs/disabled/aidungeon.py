@@ -139,7 +139,7 @@ class DungeonAPI(commands.Cog):
         if text:
             variables["input"]["text"] = text
 
-        result = await self.mutations.execute_async(query, variable_values=variables)
+        await self.mutations.execute_async(query, variable_values=variables)
 
     @commands.command()
     async def prompt(self, ctx, *, story_pitch):

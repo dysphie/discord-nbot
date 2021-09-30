@@ -32,7 +32,7 @@ def pick_random_synonym(word: str, tag: str):
             for lemma in synset.lemmas():
                 synonyms.append(lemma.name())
 
-        if(synonyms):
+        if synonyms:
             synonym = choice(tuple(set(synonyms)))
             return synonym.replace("_", " ")
 
