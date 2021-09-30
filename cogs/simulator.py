@@ -84,7 +84,7 @@ class Parrot(commands.Cog, name="Parrot"):
         maxlen = MAX_NAME_LENGTH - len(suffix)
         username = utils.truncate_string(user.display_name, maxlen) + suffix
 
-        await webhook.send(username=username, content=content, avatar_url=user.avatar.url)
+        await webhook.send(username=username, content=content, avatar_url=user.display_avatar)
 
 
 def setup(bot):

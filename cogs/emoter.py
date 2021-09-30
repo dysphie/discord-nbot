@@ -8,7 +8,7 @@ from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
-from discord import slash_command, ApplicationContext
+from discord import slash_command, ApplicationContext, Member
 from discord.ext import commands, tasks
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import InsertOne, UpdateOne
@@ -529,7 +529,7 @@ class Emoter(commands.Cog):
         if webhook:
             await webhook.send(
                 username=username, content=content,
-                avatar_url=member.avatar_url, wait=wait
+                avatar_url=member.display_avatar, wait=wait
             )
 
 
