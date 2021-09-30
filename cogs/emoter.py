@@ -2,18 +2,21 @@ import asyncio
 import logging
 import re
 from abc import abstractmethod
+from collections import Coroutine
 from datetime import datetime
 from io import BytesIO
 from typing import TypedDict, Union, List, Tuple, Optional
 import discord
 from PIL import Image
 from aiohttp import ClientSession
-from discord import slash_command, ApplicationContext, Member
+from discord import slash_command, ApplicationContext, Member, Webhook, Message, Thread, HTTPException, Forbidden, \
+    WebhookMessage
 from discord.ext import commands, tasks
+from discord.types.webhook import PartialWebhook
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import InsertOne, UpdateOne
 from pymongo.errors import DuplicateKeyError, BulkWriteError
-from discord.utils import escape_markdown as nomd
+from discord.utils import escape_markdown as nomd, MISSING
 
 EMOTE_PATTERN = re.compile(r'\$([a-zA-Z0-9]+)')
 PARTIAL_CACHED_EMOTE = re.compile(r'(.*)~\d+$')
@@ -206,7 +209,6 @@ class EmoteCollectionUpdater(commands.Cog):
 
 
 class Cache:
-
     BUFFER_SIZE = 8
 
     def __init__(self, guild, session):
@@ -320,7 +322,7 @@ class Cache:
             excess_count = len(emote_list) - (self.max - self.BUFFER_SIZE)
             if excess_count < 1:
                 continue
-                
+
             excess_emotes = sorted(emote_list, key=lambda e: e.created_at)[:excess_count]
             for excess_emote in excess_emotes:
                 if excess_emote not in to_delete:
@@ -471,7 +473,7 @@ class Emoter(commands.Cog):
 
     @commands.Cog.listener()
     @commands.guild_only()
-    async def on_message(self, message):
+    async def on_message(self, message: Message):
 
         if message.author.bot:
             return
@@ -512,25 +514,39 @@ class Emoter(commands.Cog):
             content = content.replace(f'${word}', replacement)
 
         try:
-            await self.send_as_user(message.author, content, message.channel)
+            await self.send_as_user(message, content)
         except Exception as e:
             logging.warning(e)
         else:
             await message.delete()
 
-    async def send_as_user(self, member, content, channel, wait=False):
+    async def send_as_user(self, msg: Message, content: str) -> Optional[WebhookMessage]:
 
-        username = member.display_name.ljust(2, INVISIBLE_CHAR)
+        is_thread = isinstance(msg.channel, Thread)
+        if is_thread:
+            channel = msg.channel.parent
+        else:
+            channel = msg.channel
+
         webhooks = await channel.webhooks()
-        webhook = discord.utils.find(lambda m: m.user.id == self.bot.user.id, webhooks)
+        webhook: Webhook = discord.utils.find(lambda m: m.user.id == self.bot.user.id, webhooks)
         if not webhook:
-            webhook = await channel.create_webhook(name='NBot')
+            try:
+                webhook = await channel.create_webhook(name='NBot')
+            except (HTTPException, Forbidden):
+                return None
 
-        if webhook:
-            await webhook.send(
-                username=username, content=content,
-                avatar_url=member.display_avatar, wait=wait
-            )
+        args = {
+            'content': content,
+            'username': msg.author.display_name.ljust(2, INVISIBLE_CHAR),
+            'avatar_url': msg.author.display_avatar,
+            'wait': True
+        }
+
+        if is_thread:
+            args['thread'] = msg.channel
+
+        await webhook.send(**args)
 
 
 def setup(bot):

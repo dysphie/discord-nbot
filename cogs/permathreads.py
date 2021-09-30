@@ -1,5 +1,5 @@
 import discord
-from discord import slash_command, Option, ApplicationContext, ChannelType, TextChannel, Thread
+from discord import slash_command, Option, ApplicationContext, ChannelType, TextChannel, Thread, Forbidden, NotFound
 from discord.ext import commands
 from pymongo.collection import Collection
 
@@ -24,9 +24,12 @@ class Permathreads(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         async for doc in self.permathreads.find({}):
-            thread = await self.bot.fetch_channel(doc['_id'])
-            if isinstance(thread, discord.Thread) and thread.archived:
-                await thread.edit(archived=False)
+            try:
+                thread = await self.bot.fetch_channel(doc['_id'])
+                if isinstance(thread, discord.Thread) and thread.archived:
+                    await thread.edit(archived=False)
+            except (Forbidden, NotFound):  # TODO: Cleanup
+                pass
 
     @commands.Cog.listener()
     @commands.bot_has_permissions(manage_threads=True)
