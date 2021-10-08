@@ -24,7 +24,7 @@ class Starboard(commands.Cog):
         starboard_id = self.bot.cfg['starboard_channel']
         self.starchannel = self.bot.get_channel(starboard_id)
         if not self.starchannel:
-            raise f"Couldn't find starboard channel with id {starboard_id}"
+            raise Exception(f"Couldn't find starboard channel with id {starboard_id}")
 
     @commands.Cog.listener()
     @commands.guild_only()
