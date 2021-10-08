@@ -9,7 +9,7 @@ from main import DiscordBot
 
 # Star is special and always pins, other emotes require 3 reactions
 STAR_EMOJI = '⭐'
-MIN_REACTIONS = 3
+MIN_REACTIONS = 4
 
 
 class Starboard(commands.Cog):
