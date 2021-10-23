@@ -19,7 +19,7 @@ class Parrot(commands.Cog, name="Parrot"):
         self.history = bot.db['chat_archive']
 
     @commands.command(aliases=["b", "be", "imp"])
-    async def parrot(self, ctx, name):
+    async def parrot(self, ctx, name, start_words):
 
         user = utils.lazyfind_user(ctx.guild, name)
         if not user:
@@ -34,7 +34,11 @@ class Parrot(commands.Cog, name="Parrot"):
                 return
 
         for i in range(3):
-            sentence = model.make_sentence(tries=100)
+
+            if len(start_words) > 0:
+                sentence = model.make_sentence_with_start(start_words)
+            else:
+                sentence = model.make_sentence(tries=100)
             if sentence:
                 await self.parrot_user(user, ctx.channel, sentence)
 
