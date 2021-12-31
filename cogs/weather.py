@@ -276,7 +276,7 @@ class Weather(commands.Cog):
             temp_f = (temp_c * 9 / 5) + 32
 
             feel_c = json['data']['timelines'][0]['intervals'][0]['values']['temperatureApparent']
-            feel_f = (temp_f * 9 / 5) + 32
+            feel_f = (feel_c * 9 / 5) + 32
             feels_like = f'Feels like {round(feel_c)}°C / {round(feel_f)}°F  — ' if feel_c != temp_c else ''
 
             precip_prob = json['data']['timelines'][0]['intervals'][0]['values']['precipitationProbability']
