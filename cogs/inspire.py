@@ -17,8 +17,7 @@ class Inspire(commands.Cog, name="Inspire"):
             quote_url = await r.text()
             async with self.session.get(quote_url) as r2:
                 data = io.BytesIO(await r2.read())
-                await ctx.respond('_ _')
-                await ctx.channel.send(file=discord.File(data, 'quote.png'))
+                await ctx.respond(files=[discord.File(data, 'quote.png')])
 
 
 def setup(bot):
