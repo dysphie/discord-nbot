@@ -6,7 +6,7 @@ class Cleaner(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.channel_ids = [359821217915469825, 559661355133829141]
+        self.channel_ids = [359821217915469825]
         self.cleaner.start()
 
     def cog_unload(self):
