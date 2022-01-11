@@ -1,5 +1,5 @@
 aiogoogletrans==3.3.2
-aiohttp>=3.7.4
+aiohttp==3.7.4.post0
 arrow==1.1.0
 async-timeout==3.0.1
 attrs==21.2.0
@@ -21,6 +21,7 @@ multidict==5.1.0
 nltk==3.6.2
 numpy==1.20.3
 Pillow==8.3.2
+py-cord @ git+https://github.com/Pycord-Development/pycord@75c129ed731b513161a9e9f502d60c457497d9ce
 pymongo==3.11.4
 python-dateutil==2.8.1
 PyYAML==5.4.1
@@ -31,7 +32,6 @@ tqdm==4.60.0
 typing-extensions==3.10.0.0
 Unidecode==1.2.0
 webencodings==0.5.1
-websockets>=9.1
+websockets==10.1
 yarl==1.6.3
-youtube_dl
-py-cord
+youtube-dl==2021.12.17
