@@ -84,7 +84,7 @@ class Weather(commands.Cog):
         if not location:
             result = await self.locations.find_one({'_id': ctx.author.id})
             if not result:
-                await ctx.error('No location specified and no location saved')
+                await ctx.respond('No location specified and no location saved')
                 return
 
             latitude = result['lat']
@@ -94,7 +94,7 @@ class Weather(commands.Cog):
         else:
             geoloc = self.geolocator.geocode(location)
             if not geoloc:
-                await ctx.error('Unknown location')
+                await ctx.respond('Unknown location')
                 return
 
             latitude = geoloc.latitude
@@ -134,11 +134,11 @@ class Weather(commands.Cog):
 
                 if i == 0:  # Now
                     humidity = data['data']['timelines'][0]['intervals'][i]['values']['humidity']
-                    wind = data['data']['timelines'][0]['intervals'][i]['values']['windSpeed']
+                    wind = data['data']['timelines'][0]['intervals'][i]['values']['windSpeed'] * 3.6
                     now_field = f"""
                                 {weather_icon} **{round(temp)}**°C / **{round(temp_f)}**°F 
                                 💧 **{humidity}**%
-                                🍃 **{wind}** m/s"""
+                                🍃 **{round(wind)}** km/h"""
                 else:
                     hours_from_now = arrow.get(time).humanize()
                     forecast_field += f'{weather_icon} **{round(temp)}**°C / **{round(temp_f)}**°F - {hours_from_now}\n'
@@ -147,7 +147,7 @@ class Weather(commands.Cog):
             embed.add_field(inline=True, name='Now', value=now_field)
             embed.add_field(inline=True, name='Forecast', value=forecast_field)
             embed.set_footer(text=address)
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
 
     @commands.command(aliases=['setloc'])
     async def setlocation(self, ctx, *, args):
