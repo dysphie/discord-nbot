@@ -502,6 +502,7 @@ class Emoter(commands.Cog):
                 bruh = await self.session.get(doc['url'])
                 data = await bruh.read()
                 await self.send_as_user(message, None, discord.File(BytesIO(data), f'{doc["_id"]}.gif'))
+                await message.delete()
                 return
 
         replacements = {}
