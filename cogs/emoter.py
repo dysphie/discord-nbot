@@ -494,16 +494,31 @@ class Emoter(commands.Cog):
         if num_prefixed == 0:
             return
 
-        # if the message is nothing but an emoji, cut corners and send it as an attachment
+        # if the message is nothing but an emoji, we can cut some corners
         # TODO: Resize if taller than 48px, handle extension properly (.gif seems to work for all)
         if num_prefixed == 1 and single_emote:
-            doc = await self.emotes.find_one({'_id': prefixed[0]})
-            if doc:
-                bruh = await self.session.get(doc['url'])
-                data = await bruh.read()
-                await self.send_as_user(message, None, discord.File(BytesIO(data), f'{doc["_id"]}.gif'))
+
+            # first do the cache lookup as normal
+            big_emote = self.cache.get_emote(prefixed[0])
+            if big_emote:
+                await self.send_as_user(message, big_emote.to_string(), None)
                 await message.delete()
-                return
+            # else we dont have to upload anything, we can just send as an attachment
+            else:
+                doc = await self.emotes.find_one({'_id': prefixed[0]})
+                if doc:
+                    bruh = await self.session.get(doc['url'])
+                    data = await bruh.read()
+                    await self.send_as_user(message, None, discord.File(BytesIO(data), f'{prefixed[0]}.gif'))
+                    await message.delete()
+                # if all fails, do an extra lookup in 7tv
+                else:
+                    img = await self.query_7tv_emote(prefixed[0])
+                    if img:
+                        print('sending from 7tv!')
+                        await self.send_as_user(message, None, discord.File(BytesIO(img), f'{prefixed[0]}.gif'))
+                        await message.delete()
+            return
 
         replacements = {}
         search_in_db = []
@@ -527,6 +542,9 @@ class Emoter(commands.Cog):
             for big_emote in big_emotes:
                 replacements[big_emote.name] = big_emote.to_string()
 
+
+
+        # If there are still words left, search for them in the database
         if not replacements:
             return
 
@@ -574,6 +592,44 @@ class Emoter(commands.Cog):
 
         await webhook.send(**args)
 
+    async def query_7tv_emote(self, keyword) -> Optional[bytes]:
+
+                async with self.session.post('https://api.7tv.app/v2/gql', json={
+                    'query': 'query($query: String!,$page: Int,$pageSize: Int,$globalState: String,$sortBy: String,$sortOrder: Int,$channel: String,$submitted_by: String,$filter: EmoteFilter) {search_emotes(query: $query,limit: $pageSize,page: $page,pageSize: $pageSize,globalState: $globalState,sortBy: $sortBy,sortOrder: $sortOrder,channel: $channel,submitted_by: $submitted_by,filter: $filter) {id,visibility,owner {id,display_name,role {id,name,color},banned}name,tags}}',
+                    'variables': {
+                        "query": keyword,
+                        "page": 1,
+                        "pageSize": 1,
+                        "limit": 1,
+                        "globalState": None,
+                        "sortBy": "popularity",
+                        "sortOrder": 0,
+                        "channel": None,
+                        "submitted_by": None
+                    },
+                }) as gql_response:
+                    # return the response
+                    gql_json = await gql_response.json()
+
+                    emote_name = gql_json['data']['search_emotes'][0]['name']
+                    if emote_name.lower() != keyword.lower():
+                        return
+
+                    # get the emote id
+                    emote_id = gql_json['data']['search_emotes'][0]['id']
+                    print(emote_id)
+
+                    # create a request to get the emote
+                    emote_url = f'https://cdn.7tv.app/emote/{emote_id}/2x'
+                    async with self.session.get(emote_url) as cdn_response:
+                        print(f'Got emote from {emote_url}')
+                        img = await cdn_response.read()
+                        pil_img = Image.open(BytesIO(img))
+                        pil_img.info.pop('background', None)
+                        with BytesIO() as io:
+                            pil_img.save(io, 'gif', save_all=True)
+                            io.seek(0)
+                            return io.read()
 
 def setup(bot):
     bot.add_cog(Emoter(bot))
