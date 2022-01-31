@@ -10,7 +10,7 @@ import discord
 from PIL import Image
 from aiohttp import ClientSession
 from discord import slash_command, ApplicationContext, Member, Webhook, Message, Thread, HTTPException, Forbidden, \
-    WebhookMessage
+    WebhookMessage, File
 from discord.ext import commands, tasks
 from discord.types.webhook import PartialWebhook
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -479,15 +479,36 @@ class Emoter(commands.Cog):
             return
 
         content = message.content
-        search_in_cache = set(EMOTE_PATTERN.findall(content))
-        if not search_in_cache:
+
+        single_emote = True
+        prefixed = []
+        words = content.split()
+
+        for word in words:
+            if word.startswith('$'):
+                prefixed.append(word[1:])
+            else:
+                single_emote = False
+
+        num_prefixed = len(prefixed)
+        if num_prefixed == 0:
             return
+
+        # if the message is nothing but an emoji, cut corners and send it as an attachment
+        # TODO: Resize if taller than 48px, handle extension properly (.gif seems to work for all)
+        if num_prefixed == 1 and single_emote:
+            doc = await self.emotes.find_one({'_id': prefixed[0]})
+            if doc:
+                bruh = await self.session.get(doc['url'])
+                data = await bruh.read()
+                await self.send_as_user(message, None, discord.File(BytesIO(data), f'{doc["_id"]}.gif'))
+                return
 
         replacements = {}
         search_in_db = []
 
         # Search for words in emote cache
-        for word in search_in_cache:
+        for word in prefixed:
             big_emote = self.cache.get_emote(word)
             if big_emote:
                 replacements[word] = big_emote.to_string()
@@ -514,13 +535,13 @@ class Emoter(commands.Cog):
             content = content.replace(f'${word}', replacement)
 
         try:
-            await self.send_as_user(message, content)
+            await self.send_as_user(message, content, None)
         except Exception as e:
             logging.warning(e)
         else:
             await message.delete()
 
-    async def send_as_user(self, msg: Message, content: str) -> Optional[WebhookMessage]:
+    async def send_as_user(self, msg: Message, content: Optional[str], file: Optional[File]) -> Optional[WebhookMessage]:
 
         is_thread = isinstance(msg.channel, Thread)
         if is_thread:
@@ -537,11 +558,15 @@ class Emoter(commands.Cog):
                 return None
 
         args = {
-            'content': content,
             'username': msg.author.display_name.ljust(2, INVISIBLE_CHAR),
             'avatar_url': msg.author.display_avatar,
             'wait': True
         }
+
+        if content:
+            args['content'] = content
+        if file:
+            args['file'] = file
 
         if is_thread:
             args['thread'] = msg.channel
