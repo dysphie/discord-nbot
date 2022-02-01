@@ -509,7 +509,9 @@ class Emoter(commands.Cog):
                 if doc:
                     bruh = await self.session.get(doc['url'])
                     data = await bruh.read()
-                    await self.send_as_user(message, None, discord.File(BytesIO(data), f'{prefixed[0]}.gif'))
+
+                    ext = {bruh.headers["Content-Type"].split("/")[1]}
+                    await self.send_as_user(message, None, discord.File(BytesIO(data), f'{prefixed[0]}.{ext}'))
                     await message.delete()
                 # if all fails, do an extra lookup in 7tv
                 else:
