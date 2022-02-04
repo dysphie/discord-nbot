@@ -509,6 +509,7 @@ class Emoter(commands.Cog):
             if big_emote:
                 await self.send_as_user(message, big_emote.to_string(), None)
                 await message.delete()
+                return
             # else we dont have to upload anything, we can just send as an attachment
             else:
                 doc = await self.emotes.find_one({'_id': prefixed[0]})
