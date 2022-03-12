@@ -20,7 +20,7 @@ motor==2.4.0
 multidict==5.1.0
 nltk==3.6.6
 numpy==1.21.0
-Pillow==8.3.2
+Pillow==9.0.1
 py-cord @ git+https://github.com/Pycord-Development/pycord@75c129ed731b513161a9e9f502d60c457497d9ce
 pymongo==3.11.4
 python-dateutil==2.8.1
